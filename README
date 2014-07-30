@@ -1,0 +1,191 @@
+                                 GoVPN
+                                 =====
+SYNOPSIS
+
+govpn is simple high-performance secure virtual private network daemon.
+It uses DH-EKE for mutual zero-knowledge authentication and
+authenticated encrypted transport.
+
+DESCRIPTION
+
+All packets captured on network interface are encrypted, authenticated
+and sent to remote server, that writes them to his interface, and vice
+versa. Client and server use pre-shared authentication key (PSK).
+Because of stateless UDP nature, after some timeout of inactivity peers
+forget about each other and have to retry handshake process again. As a
+rule, there are enough time-to-time traffic in ordinary Ethernet
+networks to heartbeat connection.
+
+Handshake is used to mutually authenticate peers, exchange common secret
+per-session encryption key and checks UDP transport availability.
+
+Because of UDP and authentication overhead: each packet grows in size
+during transmission, so you have to lower you maximum transmission unit
+(MTU) on network interface.
+
+High security and high performance are the goals for that daemon. It
+uses fast cryptography algorithms with 128bit security margin, strong
+mutual zero-knowledge authentication and perfect-forward secrecy
+property. An attacker can not know anything from captured traffic, even
+if pre-shared key is compromised.
+
+COMPARISON TO OpenVPN
+
+* Higher performance
+* Perfect-forward secrecy (if long-term pre-shared keys are compromised,
+  no captured traffic can be decrypted anyway)
+* Mutual two-side authentication (noone will send real network interface
+  data unless the other side is authenticated)
+* Zero-knowledge authentication (pre-shared key is not transmitted in
+  any form between the peers, not even it's hash value)
+* Fast handshake
+
+CONSOLE OUTPUT LEGEND
+
+B -- bad UDP packet (some system error)
+T -- bad tag on packet (MiTM, unordered packet)
+[HS?] -- unknown handshake message
+w -- successful write to remote peer
+r -- successful read from remote peer
+[HS1], [HS2], [HS3], [HS4] -- handshake packet stage
+[rS?] -- invalid server's random authentication number received (MiTM, bad PSK)
+[rC?] -- invalid client's random authentication number received (MiTM, bad PSK)
+[S?] -- invalid handshake stage is trying to perform (MiTM, duplicate packet)
+[OK] -- handshake's stage passed
+
+TECHNICAL INTERNALS
+
+Encryption: Salsa20
+Message authentication: Poly1305
+Password authenticated key agreement: Curve25519 based DH-EKE
+Packet overhead: 24 bytes per packet
+Handshake overhead: 4 UDP (2 from client, 2 from server) packets,
+                    232 bytes total payload
+
+                           Transport protocol
+
+    SERIAL + ENC(KEY, SERIAL, DATA) + AUTH(SERIAL + ENC_DATA)
+
+where SERIAL is message serial number. Odds are reserved for
+client->server, evens are for server->client. SERIAL is used as a nonce
+for DATA encryption: encryption key is different during each handshake,
+so (key, nonce) pair is always used once.
+
+We generate Salsa20's output using this key and nonce for each message:
+* first 256 bits are used as a one-time key for Poly1305 authentication
+* next 256 bits of output are ignored
+* and all remaining ones XORed with the data, encrypting it
+
+                           Handshake protocol
+     ┌──────┐                                  ┌──────┐
+     │Client│                                  │Server│
+     └──┬───┘                                  └──┬───┘
+        │────┐
+        │    │ R=rand(64bit); CPrivKey=rand(256bit)
+        │<───┘
+        │                                         │
+        │         R, enc(PSK, R, CPubKey)         │
+        │ ────────────────────────────────────────>
+        │                                         │
+        │                                         │────┐
+        │                                         │    │ SPrivKey=rand(256bit)
+        │                                         │<───┘
+        │                                         │
+        │                                         │────┐
+        │                                         │    │ K=DH(SPrivKey, CPubKey)
+        │                                         │<───┘
+        │                                         │
+        │                                         │────┐
+        │                                         │    │ RS=rand(64bit); SS=rand(256bit)
+        │                                         │<───┘
+        │                                         │
+        │ enc(PSK, R+1, SPubKey); enc(K, R, RS+SS)│
+        │ <────────────────────────────────────────
+        │                                         │
+        │────┐                                    │
+        │    │ K=DH(CPrivKey, SPubKey)            │
+        │<───┘                                    │
+        │                                         │
+        │────┐                                    │
+        │    │ RC=rand(64bit); SC=rand(256bit)    │
+        │<───┘                                    │
+        │                                         │
+        │          enc(K, R+1, RS+RC+SC)          │
+        │ ────────────────────────────────────────>
+        │                                         │
+        │                                         │────┐
+        │                                         │    │ compare(RS)
+        │                                         │<───┘
+        │                                         │
+        │                                         │────┐
+        │                                         │    │ MasterKey=SS XOR SC
+        │                                         │<───┘
+        │                                         │
+        │             enc(K, 0x00, RC)            │
+        │ <────────────────────────────────────────
+        │                                         │
+        │────┐                                    │
+        │    │ compare(RC)                        │
+        │<───┘                                    │
+        │                                         │
+        │────┐                                    │
+        │    │ MasterKey=SS XOR SC                │
+        │<───┘                                    │
+     ┌──┴───┐                                  ┌──┴───┐
+     │Client│                                  │Server│
+     └──────┘                                  └──────┘
+
+* client generates CPubKey, random 64bit R that is used as a nonce
+  for encryption
+* R + enc(PSK, R, CPubKey) + NULLs -> Server [56 bytes]
+* server remembers clients address, decrypt CPubKey, generates
+  SPrivKey/SPubKey, computes common shared key K (based on
+  CPubKey and SPrivKey), generates 64bit random number RS and
+  256bit random SS. PSK-encryption uses incremented R (from previous
+  message) for nonce
+* enc(PSK, SPubKey) + enc(K, RS + SS) + NULLs -> Client [88 bytes]
+* client decrypt SPubKey, computes K, decrypts RS, SS with key K,
+  remembers SS, generates 64bit random number RC and 256bit random SC,
+* enc(K, RS + RC + SC) + NULLs -> Server [64 bytes]
+* server decrypt RS, RC, SC with key K, compares RS with it's own one
+  send before, computes final main encryption key S = SS XOR SC
+* ENC(K, RC) + NULLs -> Client [24 bytes]
+* server switches to the new client
+* client decrypts RC and compares with it's own generated one, computes
+  final main encryption key S
+
+Where PSK is 256bit pre-shared key, NULLs are 16 null-bytes. R* are
+required for handshake randomization and two-way authentication. K key
+is used only during handshake. NULLs are required to differentiate
+common transport protocol messages from handshake ones. DH public keys
+can be trivially derived from private ones.
+
+
+RELATED DOCUMENTS
+
+* http://cr.yp.to/ecdh.html
+* http://cr.yp.to/snuffle.html
+* http://cr.yp.to/mac.html
+* http://grouper.ieee.org/groups/1363/passwdPK/contributions/jablon.pdf
+* Applied Cryptography (C) 1996 Bruce Schneier
+
+TODO
+
+* Move decryption and encryption processes into goroutines
+* Add identity management (client can send it's identification, server has
+  on-disk id↔key plaintext database)
+* Implement alternative Secure Remote Password protocol (it is much slower,
+  technically has more code, but human memorized passwords can be used
+  instead of keys)
+
+LICENCE
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
