@@ -44,6 +44,7 @@ CONSOLE OUTPUT LEGEND
 
 B -- bad UDP packet (some system error)
 T -- bad tag on packet (MiTM, unordered packet)
+R -- invalid sequence number (MiTM, unordered packet)
 [HS?] -- unknown handshake message
 w -- successful write to remote peer
 r -- successful read from remote peer

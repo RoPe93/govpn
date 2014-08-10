@@ -195,6 +195,7 @@ func main() {
 			}
 			nonceRecv, _ := binary.Uvarint(udpPkt.data[:8])
 			if peer.nonceRecv >= nonceRecv {
+				fmt.Print("R")
 				continue
 			}
 			copy(tag[:], udpPkt.data[len(udpPkt.data)-poly1305.TagSize:])
