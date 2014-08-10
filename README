@@ -54,6 +54,31 @@ r -- successful read from remote peer
 [S?] -- invalid handshake stage is trying to perform (MiTM, duplicate packet)
 [OK] -- handshake's stage passed
 
+EXAMPLE USAGE
+
+Let's assume that there is some insecure link between your computer and
+WiFi-reachable gateway. You have got preconfigured wlan0 network
+interface with 192.168.0/24 network. You want to create virtual
+encrypted and authenticated 172.16.0/24 network and use it as a default
+transport. MTU for that wlan0 is 1500 bytes. GoVPN will say that maximum
+MTU for the link is 1476, however it does not take in account TAP's
+Ethernet frame header length, that in my case is 14 bytes long (1476 - 14).
+
+    gateway% ip addr add 192.168.0.1/24 dev wlan0
+    gateway% tunctl -t tap10
+    gateway% ip link set mtu 1462 dev tap10
+    gateway% ip addr add 172.16.0.1/24 dev tap10
+    gateway% ip link set up dev tap10
+    gateway% govpn -key KEY -iface tap10 -bind 192.168.0.1:1194
+
+    pc% ip addr add 192.168.0.2/24 dev wlan0
+    pc% tunctl -t tap10
+    pc% ip link set mtu 1462 dev tap10
+    pc% ip addr add 172.16.0.2/24 dev tap10
+    pc% ip link set up dev tap10
+    pc% ip route add default via 172.16.0.1
+    pc% govpn -key KEY -iface tap10 -remote 192.168.0.1:1194
+
 TECHNICAL INTERNALS
 
 Encryption: Salsa20
