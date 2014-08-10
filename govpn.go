@@ -33,10 +33,6 @@ import (
 )
 
 const (
-	// NonceIncrServer is nonce increment value for server message
-	NonceIncrServer = 1
-	// NonceIncrClient is nonce increment value for client message
-	NonceIncrClient = 2
 	NonceSize       = 8
 	AliveTimeout    = time.Second * 90
 	// S20BS is Salsa20's internal blocksize in bytes
@@ -108,13 +104,11 @@ func main() {
 	var remote *net.UDPAddr
 
 	serverMode := false
-	nonceIncr := uint64(NonceIncrClient)
 	bindTo := "0.0.0.0:0"
 
 	if len(*bindAddr) > 1 {
 		bindTo = *bindAddr
 		serverMode = true
-		nonceIncr = uint64(NonceIncrServer)
 	}
 
 	bind, err := net.ResolveUDPAddr("udp", bindTo)
@@ -224,7 +218,7 @@ func main() {
 			if !peer.IsAlive() {
 				continue
 			}
-			peer.nonceOur = peer.nonceOur + nonceIncr
+			peer.nonceOur = peer.nonceOur + 2
 			pktData := ethPkt.Data()
 			binary.PutUvarint(nonce, peer.nonceOur)
 			copy(buf[S20BS:], pktData)
