@@ -68,6 +68,7 @@ var (
 	ifaceName  = flag.String("iface", "tap0", "TAP network interface")
 	keyHex     = flag.String("key", "", "Authentication key")
 	mtu        = flag.Int("mtu", 1500, "MTU")
+	verbose    = flag.Bool("v", false, "Increase verbosity")
 )
 
 func main() {
@@ -219,7 +220,9 @@ func main() {
 			if _, err := iface.Write(buf[S20BS : S20BS+len(udpPkt.data)-NonceSize-poly1305.TagSize]); err != nil {
 				log.Println("Error writing to iface")
 			}
-			fmt.Print("r")
+			if *verbose {
+				fmt.Print("r")
+			}
 		case ethPkt = <-ethSink:
 			if len(ethPkt) > maxIfacePktSize {
 				panic("Too large packet on interface")
@@ -239,7 +242,9 @@ func main() {
 			if err != nil {
 				log.Println("Error sending UDP", err)
 			}
-			fmt.Print("w")
+			if *verbose {
+				fmt.Print("w")
+			}
 		}
 	}
 }
