@@ -28,15 +28,14 @@ import (
 
 	"code.google.com/p/go.crypto/poly1305"
 	"code.google.com/p/go.crypto/salsa20"
-	"code.google.com/p/gopacket"
-	"code.google.com/p/gopacket/pcap"
+	"github.com/chon219/water"
 )
 
 const (
-	NonceSize       = 8
-	AliveTimeout    = time.Second * 90
+	NonceSize    = 8
+	AliveTimeout = time.Second * 90
 	// S20BS is Salsa20's internal blocksize in bytes
-	S20BS           = 64
+	S20BS = 64
 )
 
 type Peer struct {
@@ -66,7 +65,7 @@ type UDPPkt struct {
 var (
 	remoteAddr = flag.String("remote", "", "Remote server address")
 	bindAddr   = flag.String("bind", "", "Bind to address")
-	ifaceName  = flag.String("iface", "eth0", "Network interface")
+	ifaceName  = flag.String("iface", "tap0", "TAP network interface")
 	keyHex     = flag.String("key", "", "Authentication key")
 	mtu        = flag.Int("mtu", 1500, "MTU")
 )
@@ -87,13 +86,23 @@ func main() {
 	copy(key[:], keyDecoded)
 
 	// Interface listening
-	iface, err := pcap.OpenLive(*ifaceName, int32(*mtu), true, 0)
+	maxIfacePktSize := *mtu - poly1305.TagSize - NonceSize
+	log.Println("Max MTU", maxIfacePktSize, "on interface", *ifaceName)
+	iface, err := water.NewTAP(*ifaceName)
 	if err != nil {
 		panic(err)
 	}
-	ethSink := gopacket.NewPacketSource(iface, iface.LinkType()).Packets()
-	maxIfacePktSize := *mtu - poly1305.TagSize - NonceSize
-	log.Println("Max MTU", maxIfacePktSize, "on interface", *ifaceName)
+	ethSink := make(chan []byte)
+	go func() {
+		for {
+			buf := make([]byte, maxIfacePktSize)
+			n, err := iface.Read(buf)
+			if err != nil {
+				panic(err)
+			}
+			ethSink <- buf[:n]
+		}
+	}()
 
 	// Network address parsing
 	if (len(*bindAddr) > 1 && len(*remoteAddr) > 1) || (len(*bindAddr) == 0 && len(*remoteAddr) == 0) {
@@ -129,8 +138,8 @@ func main() {
 
 	udpSink := make(chan UDPPkt)
 	go func(conn *net.UDPConn, sink chan<- UDPPkt) {
-		data := make([]byte, *mtu)
 		for {
+			data := make([]byte, *mtu)
 			n, addr, err := conn.ReadFromUDP(data)
 			if err != nil {
 				fmt.Print("B")
@@ -141,7 +150,7 @@ func main() {
 
 	// Process packets
 	var udpPkt UDPPkt
-	var ethPkt gopacket.Packet
+	var ethPkt []byte
 	var addr string
 	var peer Peer
 	var p *Peer
@@ -207,26 +216,26 @@ func main() {
 			}
 			peer.nonceRecv = nonceRecv
 			peer.SetAlive()
-			if err := iface.WritePacketData(buf[S20BS : S20BS+len(udpPkt.data)-NonceSize-poly1305.TagSize]); err != nil {
+			if _, err := iface.Write(buf[S20BS : S20BS+len(udpPkt.data)-NonceSize-poly1305.TagSize]); err != nil {
 				log.Println("Error writing to iface")
 			}
 			fmt.Print("r")
 		case ethPkt = <-ethSink:
-			if len(ethPkt.Data()) > maxIfacePktSize {
+			if len(ethPkt) > maxIfacePktSize {
 				panic("Too large packet on interface")
 			}
 			if !peer.IsAlive() {
 				continue
 			}
 			peer.nonceOur = peer.nonceOur + 2
-			pktData := ethPkt.Data()
 			binary.PutUvarint(nonce, peer.nonceOur)
-			copy(buf[S20BS:], pktData)
+			copy(buf[S20BS:], ethPkt)
 			salsa20.XORKeyStream(buf, buf, nonce, peer.key)
 			copy(buf[S20BS-NonceSize:S20BS], nonce)
 			copy(keyAuth[:], buf[:32])
-			poly1305.Sum(tag, buf[S20BS-NonceSize:S20BS+len(pktData)], keyAuth)
-			_, err := conn.WriteTo(append(buf[S20BS-NonceSize:S20BS+len(pktData)], tag[:]...), peer.addr)
+			dataToSend := buf[S20BS-NonceSize : S20BS+len(ethPkt)]
+			poly1305.Sum(tag, dataToSend, keyAuth)
+			_, err := conn.WriteTo(append(dataToSend, tag[:]...), peer.addr)
 			if err != nil {
 				log.Println("Error sending UDP", err)
 			}
