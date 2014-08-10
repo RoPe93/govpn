@@ -106,13 +106,12 @@ func main() {
 	}()
 
 	// Network address parsing
-	if (len(*bindAddr) > 1 && len(*remoteAddr) > 1) || (len(*bindAddr) == 0 && len(*remoteAddr) == 0) {
+	if (len(*bindAddr) > 1 && len(*remoteAddr) > 1) ||
+		(len(*bindAddr) == 0 && len(*remoteAddr) == 0) {
 		panic("Either -bind or -remote must be specified only")
 	}
-
 	var conn *net.UDPConn
 	var remote *net.UDPAddr
-
 	serverMode := false
 	bindTo := "0.0.0.0:0"
 
@@ -138,16 +137,16 @@ func main() {
 	}
 
 	udpSink := make(chan UDPPkt)
-	go func(conn *net.UDPConn, sink chan<- UDPPkt) {
+	go func(conn *net.UDPConn) {
 		for {
 			data := make([]byte, *mtu)
 			n, addr, err := conn.ReadFromUDP(data)
 			if err != nil {
 				fmt.Print("B")
 			}
-			sink <- UDPPkt{addr, data[:n]}
+			udpSink <- UDPPkt{addr, data[:n]}
 		}
-	}(conn, udpSink)
+	}(conn)
 
 	// Process packets
 	var udpPkt UDPPkt
@@ -238,8 +237,7 @@ func main() {
 			copy(keyAuth[:], buf[:32])
 			dataToSend := buf[S20BS-NonceSize : S20BS+len(ethPkt)]
 			poly1305.Sum(tag, dataToSend, keyAuth)
-			_, err := conn.WriteTo(append(dataToSend, tag[:]...), peer.addr)
-			if err != nil {
+			if _, err := conn.WriteToUDP(append(dataToSend, tag[:]...), peer.addr); err != nil {
 				log.Println("Error sending UDP", err)
 			}
 			if *verbose {
