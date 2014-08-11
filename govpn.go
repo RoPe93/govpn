@@ -34,6 +34,7 @@ import (
 const (
 	NonceSize    = 8
 	AliveTimeout = time.Second * 90
+	KeySize      = 32
 	// S20BS is Salsa20's internal blocksize in bytes
 	S20BS = 64
 )
@@ -41,7 +42,7 @@ const (
 type Peer struct {
 	addr      *net.UDPAddr
 	lastPing  time.Time
-	key       *[32]byte // encryption key
+	key       *[KeySize]byte // encryption key
 	nonceOur  uint64    // nonce for our messages
 	nonceRecv uint64    // latest received nonce from remote peer
 }
@@ -59,7 +60,7 @@ func (p *Peer) SetAlive() {
 
 type UDPPkt struct {
 	addr *net.UDPAddr
-	data []byte
+	size int
 }
 
 var (
@@ -83,7 +84,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	key := new([32]byte)
+	key := new([KeySize]byte)
 	copy(key[:], keyDecoded)
 
 	// Interface listening
@@ -93,17 +94,20 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	ethSink := make(chan []byte)
+	ethBuf := make([]byte, maxIfacePktSize)
+	ethSink := make(chan int)
+	ethSinkReady := make(chan bool)
 	go func() {
 		for {
-			buf := make([]byte, maxIfacePktSize)
-			n, err := iface.Read(buf)
+			<- ethSinkReady
+			n, err := iface.Read(ethBuf)
 			if err != nil {
 				panic(err)
 			}
-			ethSink <- buf[:n]
+			ethSink <- n
 		}
 	}()
+	ethSinkReady <- true
 
 	// Network address parsing
 	if (len(*bindAddr) > 1 && len(*remoteAddr) > 1) ||
@@ -136,30 +140,37 @@ func main() {
 		}
 	}
 
+	udpBuf := make([]byte, *mtu)
 	udpSink := make(chan UDPPkt)
+	udpSinkReady := make(chan bool)
 	go func(conn *net.UDPConn) {
 		for {
-			data := make([]byte, *mtu)
-			n, addr, err := conn.ReadFromUDP(data)
+			<- udpSinkReady
+			n, addr, err := conn.ReadFromUDP(udpBuf)
 			if err != nil {
 				fmt.Print("B")
 			}
-			udpSink <- UDPPkt{addr, data[:n]}
+			udpSink <- UDPPkt{addr, n}
 		}
 	}(conn)
+	udpSinkReady <- true
 
 	// Process packets
 	var udpPkt UDPPkt
-	var ethPkt []byte
+	var udpPktData []byte
+	var ethPktSize int
 	var addr string
 	var peer Peer
 	var p *Peer
-	var buf []byte
 
 	states := make(map[string]*Handshake)
 	nonce := make([]byte, NonceSize)
-	keyAuth := new([32]byte)
+	keyAuth := new([KeySize]byte)
 	tag := new([poly1305.TagSize]byte)
+	buf := make([]byte, *mtu+S20BS)
+	emptyKey := make([]byte, KeySize)
+	ethPkt := make([]byte, maxIfacePktSize)
+	udpPktDataBuf := make([]byte, *mtu)
 
 	if !serverMode {
 		log.Println("starting handshake with", *remoteAddr)
@@ -167,10 +178,12 @@ func main() {
 	}
 
 	for {
-		buf = make([]byte, *mtu+S20BS)
 		select {
 		case udpPkt = <-udpSink:
-			if isValidHandshakePkt(udpPkt.data) {
+			copy(udpPktDataBuf, udpBuf[:udpPkt.size])
+			udpSinkReady <- true
+			udpPktData = udpPktDataBuf[:udpPkt.size]
+			if isValidHandshakePkt(udpPktData) {
 				addr = udpPkt.addr.String()
 				state, exists := states[addr]
 				if serverMode {
@@ -178,13 +191,13 @@ func main() {
 						state = &Handshake{addr: udpPkt.addr}
 						states[addr] = state
 					}
-					p = state.Server(conn, key, udpPkt.data)
+					p = state.Server(conn, key, udpPktData)
 				} else {
 					if !exists {
 						fmt.Print("[HS?]")
 						continue
 					}
-					p = state.Client(conn, key, udpPkt.data)
+					p = state.Client(conn, key, udpPktData)
 				}
 				if p != nil {
 					fmt.Print("[HS-OK]")
@@ -196,48 +209,53 @@ func main() {
 			if !peer.IsAlive() {
 				continue
 			}
-			nonceRecv, _ := binary.Uvarint(udpPkt.data[:8])
+			nonceRecv, _ := binary.Uvarint(udpPktData[:8])
 			if peer.nonceRecv >= nonceRecv {
 				fmt.Print("R")
 				continue
 			}
-			copy(tag[:], udpPkt.data[len(udpPkt.data)-poly1305.TagSize:])
-			copy(buf[S20BS:], udpPkt.data[NonceSize:len(udpPkt.data)-poly1305.TagSize])
+			copy(buf[:KeySize], emptyKey)
+			copy(tag[:], udpPktData[udpPkt.size-poly1305.TagSize:])
+			copy(buf[S20BS:], udpPktData[NonceSize:udpPkt.size-poly1305.TagSize])
 			salsa20.XORKeyStream(
-				buf[:S20BS+len(udpPkt.data)-poly1305.TagSize],
-				buf[:S20BS+len(udpPkt.data)-poly1305.TagSize],
-				udpPkt.data[:NonceSize],
+				buf[:S20BS+udpPkt.size-poly1305.TagSize],
+				buf[:S20BS+udpPkt.size-poly1305.TagSize],
+				udpPktData[:NonceSize],
 				peer.key,
 			)
-			copy(keyAuth[:], buf[:32])
-			if !poly1305.Verify(tag, udpPkt.data[:len(udpPkt.data)-poly1305.TagSize], keyAuth) {
+			copy(keyAuth[:], buf[:KeySize])
+			if !poly1305.Verify(tag, udpPktData[:udpPkt.size-poly1305.TagSize], keyAuth) {
 				fmt.Print("T")
 				continue
 			}
 			peer.nonceRecv = nonceRecv
 			peer.SetAlive()
-			if _, err := iface.Write(buf[S20BS : S20BS+len(udpPkt.data)-NonceSize-poly1305.TagSize]); err != nil {
+			if _, err := iface.Write(buf[S20BS : S20BS+udpPkt.size-NonceSize-poly1305.TagSize]); err != nil {
 				log.Println("Error writing to iface")
 			}
 			if *verbose {
 				fmt.Print("r")
 			}
-		case ethPkt = <-ethSink:
-			if len(ethPkt) > maxIfacePktSize {
+		case ethPktSize = <-ethSink:
+			if ethPktSize > maxIfacePktSize {
 				panic("Too large packet on interface")
 			}
 			if !peer.IsAlive() {
+				ethSinkReady <- true
 				continue
 			}
+			copy(ethPkt, ethBuf[:ethPktSize])
+			ethSinkReady <- true
 			peer.nonceOur = peer.nonceOur + 2
 			binary.PutUvarint(nonce, peer.nonceOur)
-			copy(buf[S20BS:], ethPkt)
+			copy(buf[:KeySize], emptyKey)
+			copy(buf[S20BS:], ethPkt[:ethPktSize])
 			salsa20.XORKeyStream(buf, buf, nonce, peer.key)
 			copy(buf[S20BS-NonceSize:S20BS], nonce)
-			copy(keyAuth[:], buf[:32])
-			dataToSend := buf[S20BS-NonceSize : S20BS+len(ethPkt)]
+			copy(keyAuth[:], buf[:KeySize])
+			dataToSend := buf[S20BS-NonceSize : S20BS+ethPktSize]
 			poly1305.Sum(tag, dataToSend, keyAuth)
-			if _, err := conn.WriteToUDP(append(dataToSend, tag[:]...), peer.addr); err != nil {
+			if _, err := conn.WriteTo(append(dataToSend, tag[:]...), peer.addr); err != nil {
 				log.Println("Error sending UDP", err)
 			}
 			if *verbose {
