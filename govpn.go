@@ -31,46 +31,34 @@ import (
 	"github.com/chon219/water"
 )
 
-const (
-	NonceSize    = 8
-	AliveTimeout = time.Second * 90
-	KeySize      = 32
-	// S20BS is Salsa20's internal blocksize in bytes
-	S20BS = 64
-)
-
-type Peer struct {
-	addr      *net.UDPAddr
-	lastPing  time.Time
-	key       *[KeySize]byte // encryption key
-	nonceOur  uint64    // nonce for our messages
-	nonceRecv uint64    // latest received nonce from remote peer
-}
-
-func (p *Peer) IsAlive() bool {
-	if (p == nil) || (p.lastPing.Add(AliveTimeout).Before(time.Now())) {
-		return false
-	}
-	return true
-}
-
-func (p *Peer) SetAlive() {
-	p.lastPing = time.Now()
-}
-
-type UDPPkt struct {
-	addr *net.UDPAddr
-	size int
-}
-
 var (
 	remoteAddr = flag.String("remote", "", "Remote server address")
 	bindAddr   = flag.String("bind", "", "Bind to address")
 	ifaceName  = flag.String("iface", "tap0", "TAP network interface")
 	keyHex     = flag.String("key", "", "Authentication key")
 	mtu        = flag.Int("mtu", 1500, "MTU")
+	timeout    = flag.Int("timeout", 60, "Timeout seconds")
 	verbose    = flag.Bool("v", false, "Increase verbosity")
 )
+
+const (
+	NonceSize = 8
+	KeySize   = 32
+	// S20BS is Salsa20's internal blocksize in bytes
+	S20BS = 64
+)
+
+type Peer struct {
+	addr      *net.UDPAddr
+	key       *[KeySize]byte // encryption key
+	nonceOur  uint64         // nonce for our messages
+	nonceRecv uint64         // latest received nonce from remote peer
+}
+
+type UDPPkt struct {
+	addr *net.UDPAddr
+	size int
+}
 
 func main() {
 	flag.Parse()
@@ -99,7 +87,7 @@ func main() {
 	ethSinkReady := make(chan bool)
 	go func() {
 		for {
-			<- ethSinkReady
+			<-ethSinkReady
 			n, err := iface.Read(ethBuf)
 			if err != nil {
 				panic(err)
@@ -141,28 +129,34 @@ func main() {
 	}
 
 	udpBuf := make([]byte, *mtu)
-	udpSink := make(chan UDPPkt)
+	udpSink := make(chan *UDPPkt)
 	udpSinkReady := make(chan bool)
 	go func(conn *net.UDPConn) {
 		for {
-			<- udpSinkReady
+			<-udpSinkReady
+			conn.SetReadDeadline(time.Now().Add(time.Second))
 			n, addr, err := conn.ReadFromUDP(udpBuf)
 			if err != nil {
-				fmt.Print("B")
+				if *verbose {
+					fmt.Print("B")
+				}
+				udpSink <- nil
+			} else {
+				udpSink <- &UDPPkt{addr, n}
 			}
-			udpSink <- UDPPkt{addr, n}
 		}
 	}(conn)
 	udpSinkReady <- true
 
 	// Process packets
-	var udpPkt UDPPkt
+	var udpPkt *UDPPkt
 	var udpPktData []byte
 	var ethPktSize int
 	var addr string
-	var peer Peer
+	var peer *Peer
 	var p *Peer
 
+	timeouts := 0
 	states := make(map[string]*Handshake)
 	nonce := make([]byte, NonceSize)
 	keyAuth := new([KeySize]byte)
@@ -173,13 +167,24 @@ func main() {
 	udpPktDataBuf := make([]byte, *mtu)
 
 	if !serverMode {
-		log.Println("starting handshake with", *remoteAddr)
 		states[remote.String()] = HandshakeStart(conn, remote, key)
 	}
 
+	finished := false
 	for {
+		if finished {
+			break
+		}
 		select {
 		case udpPkt = <-udpSink:
+			timeouts++
+			if !serverMode && timeouts >= *timeout {
+				finished = true
+			}
+			if udpPkt == nil {
+				udpSinkReady <- true
+				continue
+			}
 			copy(udpPktDataBuf, udpBuf[:udpPkt.size])
 			udpSinkReady <- true
 			udpPktData = udpPktDataBuf[:udpPkt.size]
@@ -201,12 +206,12 @@ func main() {
 				}
 				if p != nil {
 					fmt.Print("[HS-OK]")
-					peer = *p
+					peer = p
 					delete(states, addr)
 				}
 				continue
 			}
-			if !peer.IsAlive() {
+			if peer == nil {
 				continue
 			}
 			nonceRecv, _ := binary.Uvarint(udpPktData[:8])
@@ -229,7 +234,7 @@ func main() {
 				continue
 			}
 			peer.nonceRecv = nonceRecv
-			peer.SetAlive()
+			timeouts = 0
 			if _, err := iface.Write(buf[S20BS : S20BS+udpPkt.size-NonceSize-poly1305.TagSize]); err != nil {
 				log.Println("Error writing to iface")
 			}
@@ -240,7 +245,7 @@ func main() {
 			if ethPktSize > maxIfacePktSize {
 				panic("Too large packet on interface")
 			}
-			if !peer.IsAlive() {
+			if peer == nil {
 				ethSinkReady <- true
 				continue
 			}

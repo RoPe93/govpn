@@ -184,7 +184,6 @@ func (h *Handshake) Server(conn *net.UDPConn, key *[32]byte, data []byte) *Peer 
 
 		// Switch peer
 		peer := Peer{addr: h.addr, nonceOur: 0, nonceRecv: 0}
-		peer.SetAlive()
 		peer.key = KeyFromSecrets(h.sServer[:], decRs[8+8:])
 		fmt.Print("[OK]")
 		return &peer
@@ -252,7 +251,6 @@ func (h *Handshake) Client(conn *net.UDPConn, key *[32]byte, data []byte) *Peer 
 
 		// Switch peer
 		peer := Peer{addr: h.addr, nonceOur: 1, nonceRecv: 0}
-		peer.SetAlive()
 		peer.key = KeyFromSecrets(h.sServer[:], h.sClient[:])
 		fmt.Print("[OK]")
 		return &peer

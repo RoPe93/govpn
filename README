@@ -42,7 +42,7 @@ COMPARISON TO OpenVPN
 
 CONSOLE OUTPUT LEGEND
 
-B -- bad UDP packet (some system error)
+B -- bad or timeouted UDP packet (maybe network is inactive)
 T -- bad tag on packet (MiTM, unordered packet)
 R -- invalid sequence number (MiTM, unordered packet)
 [HS?] -- unknown handshake message
@@ -77,7 +77,12 @@ Ethernet frame header length, that in my case is 14 bytes long (1476 - 14).
     pc% ip addr add 172.16.0.2/24 dev tap10
     pc% ip link set up dev tap10
     pc% ip route add default via 172.16.0.1
-    pc% govpn -key KEY -iface tap10 -remote 192.168.0.1:1194
+    pc% while :; do govpn -key KEY -iface tap10 -remote 192.168.0.1:1194; done
+
+If client won't finish handshake during -timeout, then it will exit.
+If no packets are received from remote side during timeout, then daemon
+will stop sending packets to the client and client will exit. In every
+cases you have to rehandshake again.
 
 TECHNICAL INTERNALS
 
