@@ -4,7 +4,7 @@ SYNOPSIS
 
 govpn is simple high-performance secure virtual private network daemon.
 It uses DH-EKE for mutual zero-knowledge authentication and
-authenticated encrypted transport.
+authenticated encrypted transport. It runs under GNU/Linux and FreeBSD.
 
 DESCRIPTION
 

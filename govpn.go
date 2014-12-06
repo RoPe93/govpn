@@ -22,13 +22,13 @@ import (
 	"encoding/hex"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"time"
 
 	"code.google.com/p/go.crypto/poly1305"
 	"code.google.com/p/go.crypto/salsa20"
-	"github.com/chon219/water"
 )
 
 var (
@@ -47,6 +47,11 @@ const (
 	// S20BS is Salsa20's internal blocksize in bytes
 	S20BS = 64
 )
+
+type TAP interface {
+	io.Reader
+	io.Writer
+}
 
 type Peer struct {
 	addr      *net.UDPAddr
@@ -78,10 +83,7 @@ func main() {
 	// Interface listening
 	maxIfacePktSize := *mtu - poly1305.TagSize - NonceSize
 	log.Println("Max MTU", maxIfacePktSize, "on interface", *ifaceName)
-	iface, err := water.NewTAP(*ifaceName)
-	if err != nil {
-		panic(err)
-	}
+	iface := NewTAP(*ifaceName)
 	ethBuf := make([]byte, maxIfacePktSize)
 	ethSink := make(chan int)
 	ethSinkReady := make(chan bool)
@@ -236,7 +238,7 @@ func main() {
 			peer.nonceRecv = nonceRecv
 			timeouts = 0
 			if _, err := iface.Write(buf[S20BS : S20BS+udpPkt.size-NonceSize-poly1305.TagSize]); err != nil {
-				log.Println("Error writing to iface")
+				log.Println("Error writing to iface: ", err)
 			}
 			if *verbose {
 				fmt.Print("r")
