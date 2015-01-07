@@ -77,10 +77,6 @@ func dhPrivGen() *[32]byte {
 	if _, err := rand.Read(dh[:]); err != nil {
 		panic("Can not read random for DH private key")
 	}
-	// This bitwise operations are required by Curve25519 whitepaper
-	dh[0] = dh[0] & (255 - 128 - 64 - 32) // clear first three bits
-	dh[31] = dh[31] & (255 - 1)           // clear last bit
-	dh[31] = dh[31] | 2                   // set pre-last bit
 	return dh
 }
 
