@@ -1,4 +1,5 @@
 // +build linux
+
 /*
 govpn -- high-performance secure virtual private network daemon
 Copyright (C) 2014 Sergey Matveev <stargrave@stargrave.org>
