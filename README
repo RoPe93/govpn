@@ -39,6 +39,7 @@ COMPARISON TO OpenVPN
 * Zero-knowledge authentication (pre-shared key is not transmitted in
   any form between the peers, not even it's hash value)
 * Higher performance in some cases
+* Fully IPv6 compatible
 
 CONSOLE OUTPUT LEGEND
 
@@ -64,24 +65,39 @@ transport. MTU for that wlan0 is 1500 bytes. GoVPN will say that maximum
 MTU for the link is 1476, however it does not take in account TAP's
 Ethernet frame header length, that in my case is 14 bytes long (1476 - 14).
 
-    gateway% ip addr add 192.168.0.1/24 dev wlan0
-    gateway% tunctl -t tap10
-    gateway% ip link set mtu 1462 dev tap10
-    gateway% ip addr add 172.16.0.1/24 dev tap10
-    gateway% ip link set up dev tap10
-    gateway% govpn -key KEY -iface tap10 -bind 192.168.0.1:1194
+GNU/Linux IPv4 client-server example:
 
-    pc% ip addr add 192.168.0.2/24 dev wlan0
-    pc% tunctl -t tap10
-    pc% ip link set mtu 1462 dev tap10
-    pc% ip addr add 172.16.0.2/24 dev tap10
-    pc% ip link set up dev tap10
-    pc% ip route add default via 172.16.0.1
-    pc% while :; do govpn -key KEY -iface tap10 -remote 192.168.0.1:1194; done
+    server% ip addr add 192.168.0.1/24 dev wlan0
+    server% tunctl -t tap10
+    server% ip link set mtu 1462 dev tap10
+    server% ip addr add 172.16.0.1/24 dev tap10
+    server% ip link set up dev tap10
+    server% govpn -key KEY -iface tap10 -bind 192.168.0.1:1194
+
+    client% ip addr add 192.168.0.2/24 dev wlan0
+    client% tunctl -t tap10
+    client% ip link set mtu 1462 dev tap10
+    client% ip addr add 172.16.0.2/24 dev tap10
+    client% ip link set up dev tap10
+    client% ip route add default via 172.16.0.1
+    client% while :; do govpn -key KEY -iface tap10 -remote 192.168.0.1:1194; done
+
+FreeBSD IPv6 client-server example:
+
+    server% ifconfig em0 inet6 fe80::1/64
+    server% ifconfig tap10 create
+    server% ifconfig tap10 inet6 fc00::1/96 mtu 1462 up
+    server% govpn -key KEY -face tap10 -bind fe80::1%em0
+
+    client% ifconfig me0 inet6 -ifdisabled auto_linklocal
+    client% ifconfig tap10
+    client% ifconfig tap10 inet6 fc00::2/96 mtu 1462 up
+    client% route -6 add default fc00::1
+    client% while :; do govpn -key KEY -iface tap10 -remote [fe80::1%me0]:1194; done
 
 If client won't finish handshake during -timeout, then it will exit.
 If no packets are received from remote side during timeout, then daemon
-will stop sending packets to the client and client will exit. In every
+will stop sending packets to the client and client will exit. In all
 cases you have to rehandshake again.
 
 TECHNICAL INTERNALS
