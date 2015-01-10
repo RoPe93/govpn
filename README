@@ -12,9 +12,8 @@ All packets captured on network interface are encrypted, authenticated
 and sent to remote server, that writes them to his interface, and vice
 versa. Client and server use pre-shared authentication key (PSK).
 Because of stateless UDP nature, after some timeout of inactivity peers
-forget about each other and have to retry handshake process again. As a
-rule, there are enough time-to-time traffic in ordinary Ethernet
-networks to heartbeat connection.
+forget about each other and have to retry handshake process again,
+therefore background heartbeat process will be ran.
 
 Handshake is used to mutually authenticate peers, exchange common secret
 per-session encryption key and checks UDP transport availability.

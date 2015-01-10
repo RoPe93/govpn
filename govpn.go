@@ -46,7 +46,9 @@ const (
 	NonceSize = 8
 	KeySize   = 32
 	// S20BS is Salsa20's internal blocksize in bytes
-	S20BS = 64
+	S20BS         = 64
+	HeartBeatSize = 12
+	HeartBeatMark = "\x00\x00\x00HEARTBEAT"
 )
 
 type TAP interface {
@@ -163,6 +165,7 @@ func main() {
 	var udpPkt *UDPPkt
 	var udpPktData []byte
 	var ethPktSize int
+	var frame []byte
 	var addr string
 	var peer *Peer
 	var p *Peer
@@ -181,12 +184,17 @@ func main() {
 		states[remote.String()] = HandshakeStart(conn, remote, key)
 	}
 
+	heartbeat := time.Tick(time.Second * time.Duration(timeout/3))
+	heartbeatMark := []byte(HeartBeatMark)
+
 	finished := false
 	for {
 		if finished {
 			break
 		}
 		select {
+		case <-heartbeat:
+			go func() { ethSink <- -1 }()
 		case udpPkt = <-udpSink:
 			timeouts++
 			if !serverMode && timeouts >= timeout {
@@ -246,7 +254,11 @@ func main() {
 			}
 			peer.nonceRecv = nonceRecv
 			timeouts = 0
-			if _, err := iface.Write(buf[S20BS : S20BS+udpPkt.size-NonceSize-poly1305.TagSize]); err != nil {
+			frame = buf[S20BS : S20BS+udpPkt.size-NonceSize-poly1305.TagSize]
+			if string(frame[0:HeartBeatSize]) == HeartBeatMark {
+				continue
+			}
+			if _, err := iface.Write(frame); err != nil {
 				log.Println("Error writing to iface: ", err)
 			}
 			if verbose {
@@ -260,8 +272,13 @@ func main() {
 				ethSinkReady <- true
 				continue
 			}
-			copy(ethPkt, ethBuf[:ethPktSize])
-			ethSinkReady <- true
+			if ethPktSize > -1 {
+				copy(ethPkt, ethBuf[:ethPktSize])
+				ethSinkReady <- true
+			} else {
+				copy(ethPkt, heartbeatMark)
+				ethPktSize = HeartBeatSize
+			}
 			peer.nonceOur = peer.nonceOur + 2
 			binary.PutUvarint(nonce, peer.nonceOur)
 			copy(buf[:KeySize], emptyKey)
