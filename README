@@ -28,6 +28,10 @@ mutual zero-knowledge authentication and perfect-forward secrecy
 property. An attacker can not know anything from captured traffic, even
 if pre-shared key is compromised.
 
+Also you can provide up and down scripts that will be executed after
+either connection is initiated (up-script in background), or is went
+down. The first argument for them is an interface name.
+
 COMPARISON TO OpenVPN
 
 * Faster handshake
@@ -96,6 +100,16 @@ FreeBSD IPv6 client-server example:
     client% ifconfig tap10 inet6 fc00::2/96 mtu 1462 up
     client% route -6 add default fc00::1
     client% while :; do govpn -key key.txt -iface tap10 -remote [fe80::1%me0]:1194; done
+
+Example up-script:
+
+    client% cat > up.sh <<EOF
+    #!/bin/sh
+    dhclient $1
+    rtsol $1
+    EOF
+    client% chmod +x up.sh
+    client% govpn -key key.txt -iface tap10 -remote [fe80::1%me0]:1194 -up ./up.sh
 
 If client won't finish handshake during -timeout, then it will exit.
 If no packets are received from remote side during timeout, then daemon

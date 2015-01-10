@@ -18,6 +18,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 package main
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/hex"
 	"flag"
@@ -26,6 +27,9 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
+	"os"
+	"os/exec"
+	"os/signal"
 	"time"
 
 	"code.google.com/p/go.crypto/poly1305"
@@ -37,6 +41,8 @@ var (
 	bindAddr   = flag.String("bind", "", "Bind to address")
 	ifaceName  = flag.String("iface", "tap0", "TAP network interface")
 	keyPath    = flag.String("key", "", "Path to authentication key file")
+	upPath     = flag.String("up", "", "Path to up-script")
+	downPath   = flag.String("down", "", "Path to down-script")
 	mtu        = flag.Int("mtu", 1500, "MTU")
 	timeoutP   = flag.Int("timeout", 60, "Timeout seconds")
 	verboseP   = flag.Bool("v", false, "Increase verbosity")
@@ -66,6 +72,18 @@ type Peer struct {
 type UDPPkt struct {
 	addr *net.UDPAddr
 	size int
+}
+
+func ScriptCall(path *string) {
+	if *path == "" {
+		return
+	}
+	cmd := exec.Command(*path, *ifaceName)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	if err := cmd.Run(); err != nil {
+		fmt.Println(time.Now(), "script error: ", err.Error(), string(out.Bytes()))
+	}
 }
 
 func main() {
@@ -187,12 +205,17 @@ func main() {
 	heartbeat := time.Tick(time.Second * time.Duration(timeout/3))
 	heartbeatMark := []byte(HeartBeatMark)
 
+	termSignal := make(chan os.Signal, 1)
+	signal.Notify(termSignal, os.Interrupt, os.Kill)
+
 	finished := false
 	for {
 		if finished {
 			break
 		}
 		select {
+		case <-termSignal:
+			finished = true
 		case <-heartbeat:
 			go func() { ethSink <- -1 }()
 		case udpPkt = <-udpSink:
@@ -227,6 +250,7 @@ func main() {
 					fmt.Print("[HS-OK]")
 					peer = p
 					delete(states, addr)
+					go ScriptCall(upPath)
 				}
 				continue
 			}
@@ -296,4 +320,5 @@ func main() {
 			}
 		}
 	}
+	ScriptCall(downPath)
 }
