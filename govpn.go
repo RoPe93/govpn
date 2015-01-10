@@ -38,8 +38,8 @@ var (
 	ifaceName  = flag.String("iface", "tap0", "TAP network interface")
 	keyPath    = flag.String("key", "", "Path to authentication key file")
 	mtu        = flag.Int("mtu", 1500, "MTU")
-	timeout    = flag.Int("timeout", 60, "Timeout seconds")
-	verbose    = flag.Bool("v", false, "Increase verbosity")
+	timeoutP   = flag.Int("timeout", 60, "Timeout seconds")
+	verboseP   = flag.Bool("v", false, "Increase verbosity")
 )
 
 const (
@@ -68,6 +68,8 @@ type UDPPkt struct {
 
 func main() {
 	flag.Parse()
+	timeout := *timeoutP
+	verbose := *verboseP
 	log.SetFlags(log.Ldate | log.Lmicroseconds | log.Lshortfile)
 
 	// Key decoding
@@ -146,7 +148,7 @@ func main() {
 			conn.SetReadDeadline(time.Now().Add(time.Second))
 			n, addr, err := conn.ReadFromUDP(udpBuf)
 			if err != nil {
-				if *verbose {
+				if verbose {
 					fmt.Print("B")
 				}
 				udpSink <- nil
@@ -187,7 +189,7 @@ func main() {
 		select {
 		case udpPkt = <-udpSink:
 			timeouts++
-			if !serverMode && timeouts >= *timeout {
+			if !serverMode && timeouts >= timeout {
 				finished = true
 			}
 			if udpPkt == nil {
@@ -247,7 +249,7 @@ func main() {
 			if _, err := iface.Write(buf[S20BS : S20BS+udpPkt.size-NonceSize-poly1305.TagSize]); err != nil {
 				log.Println("Error writing to iface: ", err)
 			}
-			if *verbose {
+			if verbose {
 				fmt.Print("r")
 			}
 		case ethPktSize = <-ethSink:
@@ -272,7 +274,7 @@ func main() {
 			if _, err := conn.WriteTo(append(dataToSend, tag[:]...), peer.addr); err != nil {
 				log.Println("Error sending UDP", err)
 			}
-			if *verbose {
+			if verbose {
 				fmt.Print("w")
 			}
 		}
