@@ -31,14 +31,14 @@ if pre-shared key is compromised.
 
 COMPARISON TO OpenVPN
 
-* Higher performance
+* Faster handshake
 * Perfect-forward secrecy (if long-term pre-shared keys are compromised,
   no captured traffic can be decrypted anyway)
 * Mutual two-side authentication (noone will send real network interface
   data unless the other side is authenticated)
 * Zero-knowledge authentication (pre-shared key is not transmitted in
   any form between the peers, not even it's hash value)
-* Fast handshake
+* Higher performance in some cases
 
 CONSOLE OUTPUT LEGEND
 
