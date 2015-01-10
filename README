@@ -65,6 +65,9 @@ transport. MTU for that wlan0 is 1500 bytes. GoVPN will say that maximum
 MTU for the link is 1476, however it does not take in account TAP's
 Ethernet frame header length, that in my case is 14 bytes long (1476 - 14).
 
+    common% umask 066
+    common% echo MYLONG64HEXKEY > key.txt
+
 GNU/Linux IPv4 client-server example:
 
     server% ip addr add 192.168.0.1/24 dev wlan0
@@ -72,7 +75,7 @@ GNU/Linux IPv4 client-server example:
     server% ip link set mtu 1462 dev tap10
     server% ip addr add 172.16.0.1/24 dev tap10
     server% ip link set up dev tap10
-    server% govpn -key KEY -iface tap10 -bind 192.168.0.1:1194
+    server% govpn -key key.txt -iface tap10 -bind 192.168.0.1:1194
 
     client% ip addr add 192.168.0.2/24 dev wlan0
     client% tunctl -t tap10
@@ -80,20 +83,20 @@ GNU/Linux IPv4 client-server example:
     client% ip addr add 172.16.0.2/24 dev tap10
     client% ip link set up dev tap10
     client% ip route add default via 172.16.0.1
-    client% while :; do govpn -key KEY -iface tap10 -remote 192.168.0.1:1194; done
+    client% while :; do govpn -key key.txt -iface tap10 -remote 192.168.0.1:1194; done
 
 FreeBSD IPv6 client-server example:
 
     server% ifconfig em0 inet6 fe80::1/64
     server% ifconfig tap10 create
     server% ifconfig tap10 inet6 fc00::1/96 mtu 1462 up
-    server% govpn -key KEY -face tap10 -bind fe80::1%em0
+    server% govpn -key key.txt -face tap10 -bind fe80::1%em0
 
     client% ifconfig me0 inet6 -ifdisabled auto_linklocal
     client% ifconfig tap10
     client% ifconfig tap10 inet6 fc00::2/96 mtu 1462 up
     client% route -6 add default fc00::1
-    client% while :; do govpn -key KEY -iface tap10 -remote [fe80::1%me0]:1194; done
+    client% while :; do govpn -key key.txt -iface tap10 -remote [fe80::1%me0]:1194; done
 
 If client won't finish handshake during -timeout, then it will exit.
 If no packets are received from remote side during timeout, then daemon

@@ -23,6 +23,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"time"
@@ -35,7 +36,7 @@ var (
 	remoteAddr = flag.String("remote", "", "Remote server address")
 	bindAddr   = flag.String("bind", "", "Bind to address")
 	ifaceName  = flag.String("iface", "tap0", "TAP network interface")
-	keyHex     = flag.String("key", "", "Authentication key")
+	keyPath    = flag.String("key", "", "Path to authentication key file")
 	mtu        = flag.Int("mtu", 1500, "MTU")
 	timeout    = flag.Int("timeout", 60, "Timeout seconds")
 	verbose    = flag.Bool("v", false, "Increase verbosity")
@@ -70,15 +71,21 @@ func main() {
 	log.SetFlags(log.Ldate | log.Lmicroseconds | log.Lshortfile)
 
 	// Key decoding
-	if len(*keyHex) != 64 {
-		panic("Key is required argument (64 hex characters)")
-	}
-	keyDecoded, err := hex.DecodeString(*keyHex)
+	keyData, err := ioutil.ReadFile(*keyPath)
 	if err != nil {
-		panic(err)
+		panic("Unable to read keyfile: " + err.Error())
+	}
+	if len(keyData) < 64 {
+		panic("Key must be 64 hex characters long")
+	}
+	keyDecoded, err := hex.DecodeString(string(keyData[0:64]))
+	if err != nil {
+		panic("Unable to decode the key: " + err.Error())
 	}
 	key := new([KeySize]byte)
 	copy(key[:], keyDecoded)
+	keyDecoded = nil
+	keyData = nil
 
 	// Interface listening
 	maxIfacePktSize := *mtu - poly1305.TagSize - NonceSize
