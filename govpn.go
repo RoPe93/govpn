@@ -55,6 +55,8 @@ const (
 	S20BS         = 64
 	HeartBeatSize = 12
 	HeartBeatMark = "\x00\x00\x00HEARTBEAT"
+	// Maximal amount of bytes transfered with single key (4 GiB)
+	MaxBytesPerKey = 4294967296
 )
 
 type TAP interface {
@@ -189,6 +191,7 @@ func main() {
 	var p *Peer
 
 	timeouts := 0
+	bytes := 0
 	states := make(map[string]*Handshake)
 	nonce := make([]byte, NonceSize)
 	keyAuth := new([KeySize]byte)
@@ -203,6 +206,7 @@ func main() {
 	}
 
 	heartbeat := time.Tick(time.Second * time.Duration(timeout/3))
+	go func() { <-heartbeat }()
 	heartbeatMark := []byte(HeartBeatMark)
 
 	termSignal := make(chan os.Signal, 1)
@@ -212,6 +216,10 @@ func main() {
 	for {
 		if finished {
 			break
+		}
+		if !serverMode && bytes > MaxBytesPerKey {
+			states[remote.String()] = HandshakeStart(conn, remote, key)
+			bytes = 0
 		}
 		select {
 		case <-termSignal:
@@ -248,9 +256,11 @@ func main() {
 				}
 				if p != nil {
 					fmt.Print("[HS-OK]")
+					if peer == nil {
+						go ScriptCall(upPath)
+					}
 					peer = p
 					delete(states, addr)
-					go ScriptCall(upPath)
 				}
 				continue
 			}
@@ -279,6 +289,7 @@ func main() {
 			peer.nonceRecv = nonceRecv
 			timeouts = 0
 			frame = buf[S20BS : S20BS+udpPkt.size-NonceSize-poly1305.TagSize]
+			bytes += len(frame)
 			if string(frame[0:HeartBeatSize]) == HeartBeatMark {
 				continue
 			}
@@ -312,6 +323,7 @@ func main() {
 			copy(keyAuth[:], buf[:KeySize])
 			dataToSend := buf[S20BS-NonceSize : S20BS+ethPktSize]
 			poly1305.Sum(tag, dataToSend, keyAuth)
+			bytes += len(dataToSend)
 			if _, err := conn.WriteTo(append(dataToSend, tag[:]...), peer.addr); err != nil {
 				log.Println("Error sending UDP", err)
 			}
