@@ -198,8 +198,6 @@ func main() {
 	tag := new([poly1305.TagSize]byte)
 	buf := make([]byte, *mtu+S20BS)
 	emptyKey := make([]byte, KeySize)
-	ethPkt := make([]byte, maxIfacePktSize)
-	udpPktDataBuf := make([]byte, *mtu)
 
 	if !serverMode {
 		states[remote.String()] = HandshakeStart(conn, remote, key)
@@ -235,9 +233,7 @@ func main() {
 				udpSinkReady <- true
 				continue
 			}
-			copy(udpPktDataBuf, udpBuf[:udpPkt.size])
-			udpSinkReady <- true
-			udpPktData = udpPktDataBuf[:udpPkt.size]
+			udpPktData = udpBuf[:udpPkt.size]
 			if isValidHandshakePkt(udpPktData) {
 				addr = udpPkt.addr.String()
 				state, exists := states[addr]
@@ -250,6 +246,7 @@ func main() {
 				} else {
 					if !exists {
 						fmt.Print("[HS?]")
+						udpSinkReady <- true
 						continue
 					}
 					p = state.Client(conn, key, udpPktData)
@@ -262,14 +259,17 @@ func main() {
 					peer = p
 					delete(states, addr)
 				}
+				udpSinkReady <- true
 				continue
 			}
 			if peer == nil {
+				udpSinkReady <- true
 				continue
 			}
 			nonceRecv, _ := binary.Uvarint(udpPktData[:8])
 			if peer.nonceRecv >= nonceRecv {
 				fmt.Print("R")
+				udpSinkReady <- true
 				continue
 			}
 			copy(buf[:KeySize], emptyKey)
@@ -283,9 +283,11 @@ func main() {
 			)
 			copy(keyAuth[:], buf[:KeySize])
 			if !poly1305.Verify(tag, udpPktData[:udpPkt.size-poly1305.TagSize], keyAuth) {
+				udpSinkReady <- true
 				fmt.Print("T")
 				continue
 			}
+			udpSinkReady <- true
 			peer.nonceRecv = nonceRecv
 			timeouts = 0
 			frame = buf[S20BS : S20BS+udpPkt.size-NonceSize-poly1305.TagSize]
@@ -307,17 +309,16 @@ func main() {
 				ethSinkReady <- true
 				continue
 			}
-			if ethPktSize > -1 {
-				copy(ethPkt, ethBuf[:ethPktSize])
-				ethSinkReady <- true
-			} else {
-				copy(ethPkt, heartbeatMark)
-				ethPktSize = HeartBeatSize
-			}
 			peer.nonceOur = peer.nonceOur + 2
 			binary.PutUvarint(nonce, peer.nonceOur)
 			copy(buf[:KeySize], emptyKey)
-			copy(buf[S20BS:], ethPkt[:ethPktSize])
+			if ethPktSize > -1 {
+				copy(buf[S20BS:], ethBuf[:ethPktSize])
+				ethSinkReady <- true
+			} else {
+				copy(buf[S20BS:], heartbeatMark)
+				ethPktSize = HeartBeatSize
+			}
 			salsa20.XORKeyStream(buf, buf, nonce, peer.key)
 			copy(buf[S20BS-NonceSize:S20BS], nonce)
 			copy(keyAuth[:], buf[:KeySize])
