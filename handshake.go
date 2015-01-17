@@ -26,10 +26,10 @@ import (
 	"net"
 	"time"
 
-	"code.google.com/p/go.crypto/curve25519"
-	"code.google.com/p/go.crypto/poly1305"
-	"code.google.com/p/go.crypto/salsa20"
-	"code.google.com/p/go.crypto/salsa20/salsa"
+	"golang.org/x/crypto/curve25519"
+	"golang.org/x/crypto/poly1305"
+	"golang.org/x/crypto/salsa20"
+	"golang.org/x/crypto/salsa20/salsa"
 )
 
 type Handshake struct {

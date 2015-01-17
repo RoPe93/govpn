@@ -34,8 +34,8 @@ import (
 	"os/signal"
 	"time"
 
-	"code.google.com/p/go.crypto/poly1305"
-	"code.google.com/p/go.crypto/salsa20"
+	"golang.org/x/crypto/poly1305"
+	"golang.org/x/crypto/salsa20"
 )
 
 var (
