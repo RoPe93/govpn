@@ -112,7 +112,7 @@ func HandshakeStart(conn *net.UDPConn, addr *net.UDPAddr, key *[32]byte) *Handsh
 	return &state
 }
 
-func (h *Handshake) Server(conn *net.UDPConn, key *[32]byte, data []byte) *Peer {
+func (h *Handshake) Server(noncediff uint64, conn *net.UDPConn, key *[32]byte, data []byte) *Peer {
 	switch len(data) {
 	case 56: // R + ENC(PSK, dh_client_pub) + NULLs
 		fmt.Print("[HS1]")
@@ -180,7 +180,11 @@ func (h *Handshake) Server(conn *net.UDPConn, key *[32]byte, data []byte) *Peer 
 		}
 
 		// Switch peer
-		peer := Peer{addr: h.addr, nonceOur: 0, nonceRecv: 0}
+		peer := Peer{
+			addr: h.addr,
+			nonceOur: noncediff + 0,
+			nonceRecv: noncediff + 0,
+		}
 		peer.key = KeyFromSecrets(h.sServer[:], decRs[8+8:])
 		fmt.Print("[OK]")
 		return &peer
@@ -190,7 +194,7 @@ func (h *Handshake) Server(conn *net.UDPConn, key *[32]byte, data []byte) *Peer 
 	return nil
 }
 
-func (h *Handshake) Client(conn *net.UDPConn, key *[32]byte, data []byte) *Peer {
+func (h *Handshake) Client(noncediff uint64, conn *net.UDPConn, key *[32]byte, data []byte) *Peer {
 	switch len(data) {
 	case 88: // ENC(PSK, dh_server_pub) + ENC(K, RS + SS) + NULLs
 		fmt.Print("[HS2]")
@@ -247,7 +251,11 @@ func (h *Handshake) Client(conn *net.UDPConn, key *[32]byte, data []byte) *Peer 
 		}
 
 		// Switch peer
-		peer := Peer{addr: h.addr, nonceOur: 1, nonceRecv: 0}
+		peer := Peer{
+			addr: h.addr,
+			nonceOur: noncediff + 1,
+			nonceRecv: noncediff + 0,
+		}
 		peer.key = KeyFromSecrets(h.sServer[:], h.sClient[:])
 		fmt.Print("[OK]")
 		return &peer

@@ -46,6 +46,7 @@ var (
 	upPath     = flag.String("up", "", "Path to up-script")
 	downPath   = flag.String("down", "", "Path to down-script")
 	mtu        = flag.Int("mtu", 1500, "MTU")
+	nonceDiff  = flag.Int("noncediff", 1, "Allow nonce difference")
 	timeoutP   = flag.Int("timeout", 60, "Timeout seconds")
 	verboseP   = flag.Bool("v", false, "Increase verbosity")
 )
@@ -94,6 +95,7 @@ func main() {
 	flag.Parse()
 	timeout := *timeoutP
 	verbose := *verboseP
+	noncediff := uint64(*nonceDiff)
 	log.SetFlags(log.Ldate | log.Lmicroseconds | log.Lshortfile)
 
 	// Key decoding
@@ -244,14 +246,14 @@ func main() {
 						state = &Handshake{addr: udpPkt.addr}
 						states[addr] = state
 					}
-					p = state.Server(conn, key, udpPktData)
+					p = state.Server(noncediff, conn, key, udpPktData)
 				} else {
 					if !exists {
 						fmt.Print("[HS?]")
 						udpSinkReady <- true
 						continue
 					}
-					p = state.Client(conn, key, udpPktData)
+					p = state.Client(noncediff, conn, key, udpPktData)
 				}
 				if p != nil {
 					fmt.Print("[HS-OK]")
@@ -269,7 +271,7 @@ func main() {
 				continue
 			}
 			nonceRecv, _ := binary.Uvarint(udpPktData[:8])
-			if peer.nonceRecv >= nonceRecv {
+			if nonceRecv < peer.nonceRecv-noncediff {
 				fmt.Print("R")
 				udpSinkReady <- true
 				continue
