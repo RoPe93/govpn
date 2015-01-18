@@ -96,6 +96,7 @@ func main() {
 	timeout := *timeoutP
 	verbose := *verboseP
 	noncediff := uint64(*nonceDiff)
+	var err error
 	log.SetFlags(log.Ldate | log.Lmicroseconds | log.Lshortfile)
 
 	// Key decoding
@@ -123,9 +124,11 @@ func main() {
 	ethSink := make(chan int)
 	ethSinkReady := make(chan bool)
 	go func() {
+		var n int
+		var err error
 		for {
 			<-ethSinkReady
-			n, err := iface.Read(ethBuf)
+			n, err = iface.Read(ethBuf)
 			if err != nil {
 				panic(err)
 			}
@@ -169,10 +172,13 @@ func main() {
 	udpSink := make(chan *UDPPkt)
 	udpSinkReady := make(chan bool)
 	go func(conn *net.UDPConn) {
+		var n int
+		var addr *net.UDPAddr
+		var err error
 		for {
 			<-udpSinkReady
 			conn.SetReadDeadline(time.Now().Add(time.Second))
-			n, addr, err := conn.ReadFromUDP(udpBuf)
+			n, addr, err = conn.ReadFromUDP(udpBuf)
 			if err != nil {
 				if verbose {
 					fmt.Print("B")
@@ -190,9 +196,11 @@ func main() {
 	var udpPktData []byte
 	var ethPktSize int
 	var frame []byte
+	var dataToSend []byte
 	var addr string
 	var peer *Peer
 	var p *Peer
+	var nonceRecv uint64
 
 	timeouts := 0
 	bytes := 0
@@ -270,7 +278,7 @@ func main() {
 				udpSinkReady <- true
 				continue
 			}
-			nonceRecv, _ := binary.Uvarint(udpPktData[:8])
+			nonceRecv, _ = binary.Uvarint(udpPktData[:8])
 			if nonceRecv < peer.nonceRecv-noncediff {
 				fmt.Print("R")
 				udpSinkReady <- true
@@ -299,7 +307,7 @@ func main() {
 			if string(frame[0:HeartBeatSize]) == HeartBeatMark {
 				continue
 			}
-			if _, err := iface.Write(frame); err != nil {
+			if _, err = iface.Write(frame); err != nil {
 				log.Println("Error writing to iface: ", err)
 			}
 			if verbose {
@@ -326,10 +334,10 @@ func main() {
 			salsa20.XORKeyStream(buf, buf, nonce, peer.key)
 			copy(buf[S20BS-NonceSize:S20BS], nonce)
 			copy(keyAuth[:], buf[:KeySize])
-			dataToSend := buf[S20BS-NonceSize : S20BS+ethPktSize]
+			dataToSend = buf[S20BS-NonceSize : S20BS+ethPktSize]
 			poly1305.Sum(tag, dataToSend, keyAuth)
 			bytes += len(dataToSend)
-			if _, err := conn.WriteTo(append(dataToSend, tag[:]...), peer.addr); err != nil {
+			if _, err = conn.WriteTo(append(dataToSend, tag[:]...), peer.addr); err != nil {
 				log.Println("Error sending UDP", err)
 			}
 			if verbose {
