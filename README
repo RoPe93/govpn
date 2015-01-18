@@ -2,7 +2,7 @@
                                  =====
 SYNOPSIS
 
-govpn is simple high-performance secure virtual private network daemon.
+govpn is simple secure virtual private network daemon.
 It uses DH-EKE for mutual zero-knowledge authentication and
 authenticated encrypted transport. It runs under GNU/Linux and FreeBSD.
 
@@ -22,12 +22,12 @@ Because of UDP and authentication overhead: each packet grows in size
 during transmission, so you have to lower you maximum transmission unit
 (MTU) on network interface.
 
-High security and high performance are the goals for that daemon. It
-uses fast cryptography algorithms with 128bit security margin, strong
-mutual zero-knowledge authentication and perfect-forward secrecy
-property. An attacker can not know anything from captured traffic, even
-if pre-shared key is compromised. Rehandshake is performed by client
-every 4 GiB of transfered data.
+High security is the goal for that daemon. It uses fast cryptography
+algorithms with 128bit security margin, strong mutual zero-knowledge
+authentication and perfect-forward secrecy property. An attacker can not
+know anything from captured traffic, even if pre-shared key is
+compromised. Rehandshake is performed by client every 4 GiB of
+transfered data.
 
 Also you can provide up and down scripts that will be executed after
 either connection is initiated (up-script in background), or is went
@@ -42,7 +42,6 @@ COMPARISON TO OpenVPN
   data unless the other side is authenticated)
 * Zero-knowledge authentication (pre-shared key is not transmitted in
   any form between the peers, not even it's hash value)
-* Higher performance in some cases
 * Fully IPv6 compatible
 
 CONSOLE OUTPUT LEGEND
