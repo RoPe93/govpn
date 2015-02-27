@@ -6,6 +6,21 @@ govpn is simple secure virtual private network daemon.
 It uses DH-EKE for mutual zero-knowledge authentication and
 authenticated encrypted transport. It runs under GNU/Linux and FreeBSD.
 
+FEATURES
+
+* GNU/Linux and FreeBSD support
+* IPv6 compatible
+* Encrypted and authenticated transport
+* Relatively fast handshake
+* Replay attack protection
+* Perfect forward secrecy (if long-term pre-shared keys are compromised,
+  no captured traffic can be decrypted anyway)
+* Mutual two-side authentication (noone will send real network interface
+  data unless the other side is authenticated)
+* Zero knowledge authentication (pre-shared key is not transmitted in
+  any form between the peers, not even it's hash value)
+* Built-in rehandshake and heartbeat features
+
 DESCRIPTION
 
 All packets captured on network interface are encrypted, authenticated
@@ -32,17 +47,6 @@ transfered data.
 Also you can provide up and down scripts that will be executed after
 either connection is initiated (up-script in background), or is went
 down. The first argument for them is an interface name.
-
-COMPARISON TO OpenVPN
-
-* Faster handshake
-* Perfect-forward secrecy (if long-term pre-shared keys are compromised,
-  no captured traffic can be decrypted anyway)
-* Mutual two-side authentication (noone will send real network interface
-  data unless the other side is authenticated)
-* Zero-knowledge authentication (pre-shared key is not transmitted in
-  any form between the peers, not even it's hash value)
-* Fully IPv6 compatible
 
 CONSOLE OUTPUT LEGEND
 
