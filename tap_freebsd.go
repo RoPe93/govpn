@@ -2,7 +2,7 @@
 
 /*
 govpn -- Simple secure virtual private network daemon
-Copyright (C) 2014 Sergey Matveev <stargrave@stargrave.org>
+Copyright (C) 2014-2015 Sergey Matveev <stargrave@stargrave.org>
 */
 
 package main
