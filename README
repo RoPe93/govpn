@@ -122,6 +122,7 @@ cases you have to rehandshake again.
 
 TECHNICAL INTERNALS
 
+Nonce encryption: XTEA
 Encryption: Salsa20
 Message authentication: Poly1305
 Password authenticated key agreement: Curve25519 based DH-EKE
@@ -131,12 +132,24 @@ Handshake overhead: 4 UDP (2 from client, 2 from server) packets,
 
                            Transport protocol
 
-    SERIAL + ENC(KEY, SERIAL, DATA) + AUTH(SERIAL + ENC_DATA)
+    ENCn(SERIAL) + ENC(KEY, ENCn(SERIAL), DATA) + AUTH(ENCn(SERIAL) + ENC_DATA)
 
-where SERIAL is message serial number. Odds are reserved for
-client->server, evens are for server->client. SERIAL is used as a nonce
-for DATA encryption: encryption key is different during each handshake,
-so (key, nonce) pair is always used once.
+Each transport message is indistinguishable from pseudo random noise.
+
+SERIAL is an encrypted message serial number. Odds are reserved for
+client(→server) messages, evens for server(→client) messages.
+
+ENCn is XTEA block cipher algorithm used here as PRP (pseudo random
+permutation) to randomize, obfuscate SERIAL. Plaintext SERIAL state is
+kept in peers internal state, but encrypted before transmission. XTEA is
+compact and fast enough. Salsa20 is PRF function and requires much more
+code to create PRP from it. XTEA's encryption key is the first 128-bit
+of Salsa20's output with established common key and zero nonce (message
+nonces start from 1).
+
+Encrypted SERIAL is used as a nonce for DATA encryption: encryption key
+is different during each handshake, so (key, nonce) pair is always used
+only once.
 
 We generate Salsa20's output using this key and nonce for each message:
 * first 256 bits are used as a one-time key for Poly1305 authentication

@@ -30,6 +30,7 @@ import (
 	"golang.org/x/crypto/poly1305"
 	"golang.org/x/crypto/salsa20"
 	"golang.org/x/crypto/salsa20/salsa"
+	"golang.org/x/crypto/xtea"
 )
 
 type Handshake struct {
@@ -50,6 +51,16 @@ func KeyFromSecrets(server, client []byte) *[32]byte {
 		k[i] = server[i] ^ client[i]
 	}
 	return k
+}
+
+func NewNonceCipher(key *[32]byte) *xtea.Cipher {
+	nonceKey := make([]byte, 16)
+	salsa20.XORKeyStream(nonceKey, make([]byte, 32), make([]byte, 8), key)
+	ciph, err := xtea.NewCipher(nonceKey)
+	if err != nil {
+		panic(err)
+	}
+	return ciph
 }
 
 // Check if it is valid handshake-related message
@@ -181,11 +192,12 @@ func (h *Handshake) Server(noncediff uint64, conn *net.UDPConn, key *[32]byte, d
 
 		// Switch peer
 		peer := Peer{
-			addr: h.addr,
-			nonceOur: noncediff + 0,
+			addr:      h.addr,
+			nonceOur:  noncediff + 0,
 			nonceRecv: noncediff + 0,
+			key:       KeyFromSecrets(h.sServer[:], decRs[8+8:]),
 		}
-		peer.key = KeyFromSecrets(h.sServer[:], decRs[8+8:])
+		peer.nonceCipher = NewNonceCipher(peer.key)
 		fmt.Print("[OK]")
 		return &peer
 	default:
@@ -252,11 +264,12 @@ func (h *Handshake) Client(noncediff uint64, conn *net.UDPConn, key *[32]byte, d
 
 		// Switch peer
 		peer := Peer{
-			addr: h.addr,
-			nonceOur: noncediff + 1,
+			addr:      h.addr,
+			nonceOur:  noncediff + 1,
 			nonceRecv: noncediff + 0,
+			key:       KeyFromSecrets(h.sServer[:], h.sClient[:]),
 		}
-		peer.key = KeyFromSecrets(h.sServer[:], h.sClient[:])
+		peer.nonceCipher = NewNonceCipher(peer.key)
 		fmt.Print("[OK]")
 		return &peer
 	default:

@@ -36,6 +36,7 @@ import (
 
 	"golang.org/x/crypto/poly1305"
 	"golang.org/x/crypto/salsa20"
+	"golang.org/x/crypto/xtea"
 )
 
 var (
@@ -68,10 +69,11 @@ type TAP interface {
 }
 
 type Peer struct {
-	addr      *net.UDPAddr
-	key       *[KeySize]byte // encryption key
-	nonceOur  uint64         // nonce for our messages
-	nonceRecv uint64         // latest received nonce from remote peer
+	addr        *net.UDPAddr
+	key         *[KeySize]byte // encryption key
+	nonceOur    uint64         // nonce for our messages
+	nonceRecv   uint64         // latest received nonce from remote peer
+	nonceCipher *xtea.Cipher   // nonce cipher
 }
 
 type UDPPkt struct {
@@ -278,12 +280,6 @@ func main() {
 				udpSinkReady <- true
 				continue
 			}
-			nonceRecv, _ = binary.Uvarint(udpPktData[:8])
-			if nonceRecv < peer.nonceRecv-noncediff {
-				fmt.Print("R")
-				udpSinkReady <- true
-				continue
-			}
 			copy(buf[:KeySize], emptyKey)
 			copy(tag[:], udpPktData[udpPkt.size-poly1305.TagSize:])
 			copy(buf[S20BS:], udpPktData[NonceSize:udpPkt.size-poly1305.TagSize])
@@ -297,6 +293,13 @@ func main() {
 			if !poly1305.Verify(tag, udpPktData[:udpPkt.size-poly1305.TagSize], keyAuth) {
 				udpSinkReady <- true
 				fmt.Print("T")
+				continue
+			}
+			peer.nonceCipher.Decrypt(buf, udpPktData[:NonceSize])
+			nonceRecv, _ = binary.Uvarint(buf[:NonceSize])
+			if nonceRecv < peer.nonceRecv-noncediff {
+				fmt.Print("R")
+				udpSinkReady <- true
 				continue
 			}
 			udpSinkReady <- true
@@ -321,8 +324,14 @@ func main() {
 				ethSinkReady <- true
 				continue
 			}
+
 			peer.nonceOur = peer.nonceOur + 2
+			for i := 0; i < NonceSize; i++ {
+				nonce[i] = '\x00'
+			}
 			binary.PutUvarint(nonce, peer.nonceOur)
+			peer.nonceCipher.Encrypt(nonce, nonce)
+
 			copy(buf[:KeySize], emptyKey)
 			if ethPktSize > -1 {
 				copy(buf[S20BS:], ethBuf[:ethPktSize])
