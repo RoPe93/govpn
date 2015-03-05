@@ -1,20 +1,18 @@
 // +build linux
 
 /*
-govpn -- Simple secure virtual private network daemon
+GoVPN -- simple secure free software virtual private network daemon
 Copyright (C) 2014-2015 Sergey Matveev <stargrave@stargrave.org>
 */
 
-package main
+package govpn
 
 import (
+	"io"
+
 	"github.com/chon219/water"
 )
 
-func NewTAP(string ifaceName) TAP {
-	iface, err := water.NewTAP(ifaceName)
-	if err != nil {
-		panic(err)
-	}
-	return iface
+func newTAPer(string ifaceName) (io.ReadWriteCloser, error) {
+	return water.NewTAP(ifaceName)
 }

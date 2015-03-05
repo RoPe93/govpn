@@ -1,0 +1,27 @@
+Release 2.0
+-----------
+* Added clients identification.
+* Simultaneous several clients support by server.
+* Per-client up/down scripts.
+
+Release 1.5
+-----------
+* Nonce obfuscation/encryption.
+
+Release 1.4
+-----------
+* Performance optimizations.
+
+Release 1.3
+-----------
+* Heartbeat feature.
+* Rehandshake feature.
+* up- and down- optinal scripts.
+
+Release 1.1
+-----------
+* FreeBSD support.
+
+Release 1.0
+-----------
+* Initial stable release.

@@ -1,0 +1,11 @@
+You can obtain it's source code either by cloning development branches
+from Git repository: @code{git clone https://github.com/stargrave/govpn.git},
+or by downloading prepared tarballs below.
+
+@multitable {XXXXX} {XXXX KiB} {link sign}
+@headitem Version @tab Size @tab Tarball
+@item 1.5 @tab 19 KiB
+@tab @url{download/govpn-1.5.tar.xz, link} @url{download/govpn-1.5.tar.xz.sig, sign}
+@item 2.0 @tab 31 KiB
+@tab @url{download/govpn-2.0.tar.xz, link} @url{download/govpn-2.0.tar.xz.sig, sign}
+@end multitable

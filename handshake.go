@@ -1,5 +1,5 @@
 /*
-govpn -- Simple secure virtual private network daemon
+GoVPN -- simple secure free software virtual private network daemon
 Copyright (C) 2014-2015 Sergey Matveev <stargrave@stargrave.org>
 
 This program is free software: you can redistribute it and/or modify
@@ -16,14 +16,15 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-package main
+package govpn
 
 import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/binary"
-	"fmt"
+	"log"
 	"net"
+	"path"
 	"time"
 
 	"golang.org/x/crypto/curve25519"
@@ -35,17 +36,18 @@ import (
 
 type Handshake struct {
 	addr     *net.UDPAddr
-	lastPing time.Time
+	LastPing time.Time
+	Id       PeerId
 	rNonce   *[8]byte
-	dhPriv   *[32]byte // own private DH key
-	key      *[32]byte // handshake encryption key
-	rServer  *[8]byte  // random string for authentication
+	dhPriv   *[32]byte      // own private DH key
+	key      *[KeySize]byte // handshake encryption key
+	rServer  *[8]byte       // random string for authentication
 	rClient  *[8]byte
 	sServer  *[32]byte // secret string for main key calculation
 	sClient  *[32]byte
 }
 
-func KeyFromSecrets(server, client []byte) *[32]byte {
+func keyFromSecrets(server, client []byte) *[KeySize]byte {
 	k := new([32]byte)
 	for i := 0; i < 32; i++ {
 		k[i] = server[i] ^ client[i]
@@ -53,19 +55,9 @@ func KeyFromSecrets(server, client []byte) *[32]byte {
 	return k
 }
 
-func NewNonceCipher(key *[32]byte) *xtea.Cipher {
-	nonceKey := make([]byte, 16)
-	salsa20.XORKeyStream(nonceKey, make([]byte, 32), make([]byte, 8), key)
-	ciph, err := xtea.NewCipher(nonceKey)
-	if err != nil {
-		panic(err)
-	}
-	return ciph
-}
-
-// Check if it is valid handshake-related message
-// Minimal size and last 16 zero bytes
-func isValidHandshakePkt(pkt []byte) bool {
+// Check if it is valid handshake-related message.
+// Minimal size and last 16 zero bytes.
+func IsValidHandshakePkt(pkt []byte) bool {
 	if len(pkt) < 24 {
 		return false
 	}
@@ -99,10 +91,22 @@ func dhKeyGen(priv, pub *[32]byte) *[32]byte {
 	return key
 }
 
-func HandshakeStart(conn *net.UDPConn, addr *net.UDPAddr, key *[32]byte) *Handshake {
-	state := Handshake{}
-	state.addr = addr
-	state.lastPing = time.Now()
+// Create new handshake state.
+func HandshakeNew(addr *net.UDPAddr) *Handshake {
+	state := Handshake{
+		addr:     addr,
+		LastPing: time.Now(),
+	}
+	return &state
+}
+
+// Start handshake's procedure from the client.
+// It is the entry point for starting the handshake procedure.
+// You have to specify outgoing conn address, remote's addr address,
+// our own identification and an encryption key. First handshake packet
+// will be sent immediately.
+func HandshakeStart(conn *net.UDPConn, addr *net.UDPAddr, id *PeerId, key *[32]byte) *Handshake {
+	state := HandshakeNew(addr)
 
 	state.dhPriv = dhPrivGen()
 	dhPub := new([32]byte)
@@ -115,22 +119,46 @@ func HandshakeStart(conn *net.UDPConn, addr *net.UDPAddr, key *[32]byte) *Handsh
 	enc := make([]byte, 32)
 	salsa20.XORKeyStream(enc, dhPub[:], state.rNonce[:], key)
 
-	if _, err := conn.WriteTo(
-		append(state.rNonce[:],
-			append(enc, make([]byte, poly1305.TagSize)...)...), addr); err != nil {
+	ciph, err := xtea.NewCipher(id[:])
+	if err != nil {
 		panic(err)
 	}
-	return &state
+	rEnc := make([]byte, xtea.BlockSize)
+	ciph.Encrypt(rEnc, state.rNonce[:])
+
+	data := append(state.rNonce[:], enc...)
+	data = append(data, rEnc...)
+	data = append(data, '\x00')
+	data = append(data, make([]byte, poly1305.TagSize)...)
+
+	if _, err := conn.WriteTo(data, addr); err != nil {
+		panic(err)
+	}
+	return state
 }
 
-func (h *Handshake) Server(noncediff uint64, conn *net.UDPConn, key *[32]byte, data []byte) *Peer {
+// Process handshake message on the server side.
+// This function is intended to be called on server's side.
+// Our outgoing conn connection and received data are required.
+// If this is the final handshake message, then new Peer object
+// will be created and used as a transport. If no mutually
+// authenticated Peer is ready, then return nil.
+func (h *Handshake) Server(conn *net.UDPConn, data []byte) *Peer {
 	switch len(data) {
-	case 56: // R + ENC(PSK, dh_client_pub) + NULLs
-		fmt.Print("[HS1]")
+	case 65: // R + ENC(PSK, dh_client_pub) + xtea(ID, R) + NULL + NULLs
 		if h.rNonce != nil {
-			fmt.Print("[S?]")
+			log.Println("Invalid handshake stage from", h.addr)
 			return nil
 		}
+
+		// Try to determine client's ID
+		id := IDsCache.Find(data[:8], data[8+32:8+32+8])
+		if id == nil {
+			log.Println("Unknown identity from", h.addr)
+			return nil
+		}
+		key := KeyRead(path.Join(PeersPath, id.String(), "key"))
+		h.Id = *id
 
 		// Generate private DH key
 		h.dhPriv = dhPrivGen()
@@ -167,19 +195,18 @@ func (h *Handshake) Server(noncediff uint64, conn *net.UDPConn, key *[32]byte, d
 				append(encRs, make([]byte, poly1305.TagSize)...)...), h.addr); err != nil {
 			panic(err)
 		}
-		fmt.Print("[OK]")
+		h.LastPing = time.Now()
 	case 64: // ENC(K, RS + RC + SC) + NULLs
-		fmt.Print("[HS3]")
 		if (h.rNonce == nil) || (h.rClient != nil) {
-			fmt.Print("[S?]")
+			log.Println("Invalid handshake stage from", h.addr)
 			return nil
 		}
 
-		// Decrypt Rs compare rServer
+		// Decrypted Rs compare rServer
 		decRs := make([]byte, 8+8+32)
 		salsa20.XORKeyStream(decRs, data[:8+8+32], h.rNonceNext(), h.key)
-		if res := subtle.ConstantTimeCompare(decRs[:8], h.rServer[:]); res != 1 {
-			fmt.Print("[rS?]")
+		if subtle.ConstantTimeCompare(decRs[:8], h.rServer[:]) != 1 {
+			log.Println("Invalid server's random number with", h.addr)
 			return nil
 		}
 
@@ -191,27 +218,28 @@ func (h *Handshake) Server(noncediff uint64, conn *net.UDPConn, key *[32]byte, d
 		}
 
 		// Switch peer
-		peer := Peer{
-			addr:      h.addr,
-			nonceOur:  noncediff + 0,
-			nonceRecv: noncediff + 0,
-			key:       KeyFromSecrets(h.sServer[:], decRs[8+8:]),
-		}
-		peer.nonceCipher = NewNonceCipher(peer.key)
-		fmt.Print("[OK]")
-		return &peer
+		peer := newPeer(h.addr, h.Id, 0, keyFromSecrets(h.sServer[:], decRs[8+8:]))
+		h.LastPing = time.Now()
+		return peer
 	default:
-		fmt.Print("[HS?]")
+		log.Println("Invalid handshake message from", h.addr)
 	}
 	return nil
 }
 
-func (h *Handshake) Client(noncediff uint64, conn *net.UDPConn, key *[32]byte, data []byte) *Peer {
+// Process handshake message on the client side.
+// This function is intended to be called on client's side.
+// Our outgoing conn connection, authentication key and received data
+// are required. Client does not work with identities, as he is the
+// only one, so key is a requirement.
+// If this is the final handshake message, then new Peer object
+// will be created and used as a transport. If no mutually
+// authenticated Peer is ready, then return nil.
+func (h *Handshake) Client(conn *net.UDPConn, key *[KeySize]byte, data []byte) *Peer {
 	switch len(data) {
 	case 88: // ENC(PSK, dh_server_pub) + ENC(K, RS + SS) + NULLs
-		fmt.Print("[HS2]")
 		if h.key != nil {
-			fmt.Print("[S?]")
+			log.Println("Invalid handshake stage from", h.addr)
 			return nil
 		}
 
@@ -246,34 +274,27 @@ func (h *Handshake) Client(noncediff uint64, conn *net.UDPConn, key *[32]byte, d
 		if _, err := conn.WriteTo(append(encRs, make([]byte, poly1305.TagSize)...), h.addr); err != nil {
 			panic(err)
 		}
-		fmt.Print("[OK]")
+		h.LastPing = time.Now()
 	case 24: // ENC(K, RC) + NULLs
-		fmt.Print("[HS4]")
 		if h.key == nil {
-			fmt.Print("[S?]")
+			log.Println("Invalid handshake stage from", h.addr)
 			return nil
 		}
 
 		// Decrypt rClient
 		dec := make([]byte, 8)
 		salsa20.XORKeyStream(dec, data[:8], make([]byte, 8), h.key)
-		if res := subtle.ConstantTimeCompare(dec, h.rClient[:]); res != 1 {
-			fmt.Print("[rC?]")
+		if subtle.ConstantTimeCompare(dec, h.rClient[:]) != 1 {
+			log.Println("Invalid client's random number with", h.addr)
 			return nil
 		}
 
 		// Switch peer
-		peer := Peer{
-			addr:      h.addr,
-			nonceOur:  noncediff + 1,
-			nonceRecv: noncediff + 0,
-			key:       KeyFromSecrets(h.sServer[:], h.sClient[:]),
-		}
-		peer.nonceCipher = NewNonceCipher(peer.key)
-		fmt.Print("[OK]")
-		return &peer
+		peer := newPeer(h.addr, h.Id, 1, keyFromSecrets(h.sServer[:], h.sClient[:]))
+		h.LastPing = time.Now()
+		return peer
 	default:
-		fmt.Print("[HS?]")
+		log.Println("Invalid handshake message from", h.addr)
 	}
 	return nil
 }

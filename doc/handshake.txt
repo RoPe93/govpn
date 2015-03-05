@@ -1,0 +1,21 @@
+@startuml
+participant Client
+participant Server
+
+Client -> Client : R=rand(64bit)
+Client -> Client : CPrivKey=rand(256bit)
+Client -> Server : R, enc(PSK, R, CPubKey), xtea(ID, R)
+Server -> Server : SPrivKey=rand(256bit)
+Server -> Server : K=DH(SPrivKey, CPubKey)
+Server -> Server : RS=rand(64bit)
+Server -> Server : SS=rand(256bit)
+Server -> Client : enc(PSK, R+1, SPubKey); enc(K, R, RS+SS)
+Client -> Client : K=DH(CPrivKey, SPubKey)
+Client -> Client : RC=rand(64bit); SC=rand(256bit)
+Client -> Server : enc(K, R+1, RS+RC+SC)
+Server -> Server : compare(RS)
+Server -> Server : MasterKey=SS XOR SC
+Server -> Client : enc(K, 0x00, RC)
+Client -> Client : compare(RC)
+Client -> Client : MasterKey=SS XOR SC
+@enduml

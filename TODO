@@ -1,0 +1,6 @@
+* Increase performance
+* Implement rate-control
+* Probably implement alternative Secure Remote Password protocol to allow
+  human memorized passphrases to be used
+* Randomize ports usage
+* Fragmentize packets, noise the traffic
