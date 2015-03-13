@@ -129,9 +129,26 @@ are provided below, but be sure that you are reading them from the
 trusted source. Alternatively check this page from other sources and
 look for the mailing list announcements.
 
-You have to set up @code{$GOPATH} properly first. After that you can
-just type @code{make} and all necessary Go libraries will be installed
-and client/server binaries are built in the current directory.
+You have to set up @code{$GOPATH} properly first. For example you can
+clone the repository or decompress tarball and set path like this:
+
+@example
+% mkdir -p govpn/src
+% git clone https://github.com/stargrave/govpn govpn/src/govpn
+or
+% tar xfC govpn-1.5.tar.xz govpn/src && mv govpn/src/govpn-1.5 govpn/src/govpn
+% export GOPATH=$(pwd)/govpn:$GOPATH
+@end example
+
+After that you can just type @code{make} and all necessary Go libraries
+will be installed and client/server binaries are built in the current
+directory:
+
+@example
+% cd govpn/src/govpn
+% make
+[or gmake under FreeBSD]
+@end example
 
 @include pubkey.texi
 

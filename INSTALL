@@ -1,5 +1,5 @@
 GoVPN is a program written on Go programming language. If you have set
-up $GOPATH environment, then simple "make all" should build govpn-client
-and govpn-server executable binaries.
+up $GOPATH environment properly, then simple "make all" should build
+govpn-client and govpn-server executable binaries.
 
-For usage documentation see either doc/govpn.info or doc/govpn.texi.
+For details see either doc/govpn.info or doc/govpn.texi.
