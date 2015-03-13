@@ -10,7 +10,7 @@ package govpn
 import (
 	"io"
 
-	"github.com/chon219/water"
+	"github.com/bigeagle/water"
 )
 
 func newTAPer(string ifaceName) (io.ReadWriteCloser, error) {
