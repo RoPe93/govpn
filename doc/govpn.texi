@@ -202,6 +202,9 @@ transport. MTU for that wlan0 is 1500 bytes. GoVPN will say that maximum
 MTU for the link is 1476, however it does not take in account TAP's
 Ethernet frame header length, that in my case is 14 bytes long (1476 - 14).
 
+Do not forget about setting @code{GOMAXPROC} environment variable for
+using more than one CPU.
+
 GNU/Linux IPv4 client-server example:
 
 @example
@@ -216,7 +219,7 @@ server% tunctl -t tap10
 server% ip link set mtu 1462 dev tap10
 server% ip addr add 172.16.0.1/24 dev tap10
 server% ip link set up dev tap10
-server% govpn -bind 192.168.0.1:1194
+server% GOMAXPROC=4 govpn-server -bind 192.168.0.1:1194
 @end example
 
 @example
@@ -228,8 +231,9 @@ client% ip link set mtu 1462 dev tap10
 client% ip addr add 172.16.0.2/24 dev tap10
 client% ip link set up dev tap10
 client% ip route add default via 172.16.0.1
+client% export GOMAXPROC=4
 client% while :; do
-    govpn -key key.txt -id CLIENTID -iface tap10 -remote 192.168.0.1:1194
+    govpn-client -key key.txt -id CLIENTID -iface tap10 -remote 192.168.0.1:1194
 done
 @end example
 
@@ -248,7 +252,7 @@ echo $tap
 EOF
 server% chmod 500 peers/CLIENTID/up.sh
 server% ifconfig em0 inet6 fe80::1/64
-server% govpn -bind fe80::1%em0
+server% GOMAXPROC=4 govpn-server -bind fe80::1%em0
 @end example
 
 @example
@@ -256,8 +260,9 @@ client% ifconfig me0 inet6 -ifdisabled auto_linklocal
 client% ifconfig tap10
 client% ifconfig tap10 inet6 fc00::2/96 mtu 1462 up
 client% route -6 add default fc00::1
+client% export GOMAXPROC=4
 client% while :; do
-    govpn -key key.txt -id CLIENTID -iface tap10 -remote [fe80::1%me0]:1194
+    govpn-client -key key.txt -id CLIENTID -iface tap10 -remote [fe80::1%me0]:1194
 done
 @end example
 
