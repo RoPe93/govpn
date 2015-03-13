@@ -8,4 +8,9 @@ or by downloading prepared tarballs below.
 @tab @url{download/govpn-1.5.tar.xz, link} @url{download/govpn-1.5.tar.xz.sig, sign}
 @item 2.0 @tab 31 KiB
 @tab @url{download/govpn-2.0.tar.xz, link} @url{download/govpn-2.0.tar.xz.sig, sign}
+@item 2.1 @tab 32 KiB
+@tab @url{download/govpn-2.1.tar.xz, link} @url{download/govpn-2.1.tar.xz.sig, sign}
 @end multitable
+
+Sourceforge.net also provides mirror for the files above:
+@url{http://sourceforge.net/projects/govpn/files/}.

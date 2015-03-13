@@ -13,6 +13,6 @@ import (
 	"path"
 )
 
-func newTAPer(ifaceName string) (io.ReadWriteCloser, error) {
+func newTAPer(ifaceName string) (io.ReadWriter, error) {
 	return os.OpenFile(path.Join("/dev/", ifaceName), os.O_RDWR, os.ModePerm)
 }

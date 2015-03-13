@@ -1,3 +1,7 @@
+Release 2.1
+-----------
+* Fixed Linux-related building.
+
 Release 2.0
 -----------
 * Added clients identification.

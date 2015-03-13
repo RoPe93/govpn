@@ -21,14 +21,14 @@ GNU General Public License for more details.
 @node Top
 @top GoVPN
 
-This manual is for GoVPN -- simple secure free software
-virtual private network (VPN) daemon.
+This manual is for GoVPN -- simple secure free software virtual private
+network (VPN) daemon, written entirely on Go programming language.
 @end ifnottex
 
 @menu
 * Overview::
 * News::
-* Getting source code::
+* Getting and building source code::
 * User manual::
 * Developer manual::
 * Reporting bugs::
@@ -39,8 +39,10 @@ virtual private network (VPN) daemon.
 @unnumbered Overview
 
 GoVPN is simple secure virtual private network daemon. It uses
-Diffie-Hellman Encrypted Key Exchange (DH-EKE) for mutual zero-knowledge
-peers authentication and authenticated encrypted data transport.
+@url{https://en.wikipedia.org/wiki/Encrypted_key_exchange, Diffie-Hellman Encrypted Key Exchange}
+(DH-EKE) for mutual zero-knowledge peers authentication and
+authenticated encrypted data transport. It is written entirely on
+@url{http://golang.org/, Go programming language}.
 
 All packets captured on network interface are encrypted, authenticated
 and sent to remote server, that writes them to his interface, and vice
@@ -70,20 +72,28 @@ all of them independently. Identification key is not secret, but it is
 encrypted (obfuscated) during transmission.
 
 @itemize @bullet
-@item GNU/Linux and FreeBSD support
+@item
+Works with @url{https://en.wikipedia.org/wiki/TAP_(network_driver), TAP}
+network interfaces on top of UDP entirely
+@item
+@url{https://www.gnu.org/, GNU}/Linux and
+@url{http://www.freebsd.org/, FreeBSD} support
 @item IPv6 compatible
 @item Encrypted and authenticated transport
 @item Relatively fast handshake
-@item Replay attack protection
 @item
-Perfect forward secrecy (if long-term pre-shared keys are compromised,
-no captured traffic can be decrypted anyway)
+@url{https://en.wikipedia.org/wiki/Replay_attack, Replay attack} protection
+@item
+@url{https://en.wikipedia.org/wiki/Forward_secrecy, Perfect forward secrecy}
+(if long-term pre-shared keys are compromised, no captured traffic can
+be decrypted anyway)
 @item
 Mutual two-side authentication (noone will send real network interface
 data unless the other side is authenticated)
 @item
-Zero knowledge authentication (pre-shared key is not transmitted in
-any form between the peers, not even it's hash value)
+@url{https://en.wikipedia.org/wiki/Zero-knowledge_password_proof, Zero knowledge}
+authentication (pre-shared key is not transmitted in any form between
+the peers, not even it's hash value)
 @item Built-in rehandshake and heartbeat features
 @item Several simultaneous clients support
 @end itemize
@@ -93,11 +103,14 @@ any form between the peers, not even it's hash value)
 
 @verbatiminclude ../NEWS
 
-@node Getting source code
-@unnumbered Getting source code
+@node Getting and building source code
+@unnumbered Getting and building source code
 
-GoVPN is written on Go programming language and depends on
-@code{golang.org/x/crypto} libraries.
+GoVPN is written on Go programming language, But
+@url{https://www.gnu.org/software/make/, Make} program is recommended
+also to be used. @url{https://www.gnu.org/software/texinfo/, Texinfo} is
+used for building documentation. Also it depends on
+@code{golang.org/x/crypto} Go libraries.
 
 @include download.texi
 
@@ -116,44 +129,28 @@ are provided below, but be sure that you are reading them from the
 trusted source. Alternatively check this page from other sources and
 look for the mailing list announcements.
 
-@verbatim
-pub   rsa2048/FFE2F4A1 2015-03-10
-uid       [ultimate] Sergey Matveev (GoVPN release signing key) <stargrave@stargrave.org>
-sub   rsa2048/8A6C750A 2015-03-10
+You have to set up @code{$GOPATH} properly first. For example you can
+clone the repository or decompress tarball and set path like this:
 
------BEGIN PGP PUBLIC KEY BLOCK-----
+@example
+% mkdir -p govpn/src
+% git clone https://github.com/stargrave/govpn govpn/src/govpn
+or
+% tar xfC govpn-1.5.tar.xz govpn/src && mv govpn/src/govpn-1.5 govpn/src/govpn
+% export GOPATH=$(pwd)/govpn:$GOPATH
+@end example
 
-mQENBFT/H6cBCADTf/oqoTTBAA/CCQuYtzg8vrXxyjXj9yy4lTWqMSwgLXMm8br/
-kG0Jnk63oP3hggI3hm2mpuiNwpwrJiORLBZCe8JgZW71zG4LfhVpQeWd7fu8WxDx
-0uUZWByz5KcK8c/kNWNDpSkMmmqdE/8v0YDFbsz5U+ytp/Kki/gj3BCeIX3jYOL1
-fxczkv2okoU+aGYXt9z50VzheLUSRLzkkX8yNSpszqfB0LEEmUk8HO2fSS/bXwaY
-ZXX5//suH8V5hwq8vB8dHHCquZW6blyzcTa2KGIh6g2CmpypIQp/i5QAbzOCHKTM
-A1F7A1r0kYF2WfZOrycCfjUx3GA5B7sytuA3ABEBAAG0RFNlcmdleSBNYXR2ZWV2
-IChHb1ZQTiByZWxlYXNlIHNpZ25pbmcga2V5KSA8c3RhcmdyYXZlQHN0YXJncmF2
-ZS5vcmc+iQE8BBMBCAAmBQJU/x+nAhsDCAsKCQgHBAMCBxUKCQgLAwIFFgIBAwAC
-HgECF4AACgkQ8vWQRf/i9KEZ/AgAqYF/RRNwwhgLgFqTLfw3ha0FeiSso7H9ITDo
-cdJ/domLHaFvmwFIDQQKV8Zd1Rnj6xTCs2bq2O5hYMLrFZg85A9i5tLwkgFc9J5G
-+8K3K/dh9Y4pArbM+craO+xydrwLyg1zlXCezthWbL0iXO/CuGiuBBCZJqRJ9HV4
-cZr4TRA3Znm5nt96rRsR86XqOgr0iOEDtYKfKW/IzDqOEgXUN5o2bUwuQawe9Y8d
-CngXzJcfb2eJ/TqSP9CxVWscjz4sAmD3/ECrHSjX7xsusIs46F2+VMlEXFuST52r
-zamfiGKlol8XvimUjKhlMWjqfdcJ0+jvFftsa7HXQUwRoQ1vJYheBBARCAAGBQJU
-/x/VAAoJEK4agQnkmFfvqn8A/ReK2ZZrnI9s0rzTsF1jrTZ1o5YowuINOzVMmLbE
-aYuGAP4iGwPgwVbANu4dWaP2N03oL4xFtmdaeNn3sB9ZqJOOyrkBDQRU/x+nAQgA
-uYBRyJVwhlE2SRIEmMggwr4gq1JBM2Ge5O46usf+YPUjCJKWoAj+MpQoq7r+oA/s
-E/6kGvWgngwV9prCdNkvcdwEWbb+n9PcMc2ZuIGRV3iOKYlYEBFV0bfM9zEV2jar
-1YQ+J/48UX7R00cYJuXel7Dy77V9eNd+Ukyowm93fggFlBDBGBjVbNtfIorHNYjB
-01CCu3i/8yxrMyFRvMKyAVEGp3obgmlam4DNkNIhFMv3du0tFnDFBsZf7N0kbLWI
-xEEJoc/jxaezDytQpUr3RhlMsLV6N/jjIZuy36QO1sbFeOe2to0E7ixaFzNCWsqY
-cxUfnJ3wi7hOiOwE2PF3tQARAQABiQEfBBgBCAAJBQJU/x+nAhsMAAoJEPL1kEX/
-4vShrVcIAKLUwMn7WgK6thmwPjdwP5V/jTlsWLWk2O/LEN4W/R0mw2hRsgRG/8Sz
-qlAP6vfl7ERaWuyL+fp72rKnGTGU9CEvn6PKmaG7bi4tGEvWXscNc10r0leIAP63
-pkQOa6Nyx2axJlJdSuTsYetd1ZgNpHNng+lxSUBlkPMOhPd/P/Ok7DShZjd2jhQ1
-jUbjWn+P7ARGEvgdd5utNjy/RaSwrLG8NXj3I+XuksG0/TPeG0zu9NOPzWZq9sCc
-5VbDNJTYtsMFs1etHE95Efmx6yUquQyB+g/HgvkH/LzthBawVVHxZNzzHgc6KN5w
-E0itJPXMaQL+juUfiNM0i2R1O8nJo14=
-=LJzj
------END PGP PUBLIC KEY BLOCK-----
-@end verbatim
+After that you can just type @code{make} and all necessary Go libraries
+will be installed and client/server binaries are built in the current
+directory:
+
+@example
+% cd govpn/src/govpn
+% make
+[or gmake under FreeBSD]
+@end example
+
+@include pubkey.texi
 
 @node User manual
 @unnumbered User manual
@@ -286,13 +283,13 @@ cases you have to rehandshake again.
 
 @table @asis
 @item Nonce and identification encryption
-XTEA
+@url{http://143.53.36.235:8080/tea.htm, XTEA}
 @item Data encryption
-Salsa20
+@url{http://cr.yp.to/snuffle.html, Salsa20}
 @item Message authentication
-Poly1305
+@url{http://cr.yp.to/mac.html, Poly1305}
 @item Password authenticated key agreement
-Curve25519 based DH-EKE
+@url{http://cr.yp.to/ecdh.html, Curve25519} based DH-EKE
 @item Packet overhead
 24 bytes per packet
 @item Handshake overhead
@@ -314,8 +311,8 @@ ENCn(SERIAL) + ENC(KEY, ENCn(SERIAL), DATA) +
 
 Each transport message is indistinguishable from pseudo random noise.
 
-@code{SERIAL} is message's serial number. Odds are reserved for client(→server)
-messages, evens for server(→client) messages.
+@code{SERIAL} is message's serial number. Odds are reserved for
+client(→server) messages, evens for server(→client) messages.
 
 @code{ENCn} is XTEA block cipher algorithm used here as PRP (pseudo
 random permutation) to randomize, obfuscate @code{SERIAL}. Plaintext

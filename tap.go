@@ -27,7 +27,7 @@ import (
 
 type TAP struct {
 	Name  string
-	dev   io.ReadWriteCloser
+	dev   io.ReadWriter
 	buf   []byte
 	sink  chan []byte
 	ready chan struct{}
